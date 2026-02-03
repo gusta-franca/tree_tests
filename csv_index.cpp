@@ -1,0 +1,272 @@
+// csv_index.cpp
+
+#include "csv_index.h"
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <stdexcept>
+#include <chrono>
+#include <future>
+#include <thread>
+#include <sys/resource.h>
+#include "csv.h"
+
+// --- ColumnIndex Implementation ---
+
+ColumnIndex::ColumnIndex(size_t col_index, const std::string& col_name)
+    : index(col_index), name(col_name) {}
+
+void ColumnIndex::add(uint32_t value, uint32_t tuple_id) {
+    this->value_to_tuples[value].add(tuple_id);
+}
+
+const roaring::Roaring* ColumnIndex::get_tuples(uint32_t value) const {
+    auto it = this->value_to_tuples.find(value);
+    return (it != this->value_to_tuples.end()) ? &it->second : nullptr;
+}
+
+size_t ColumnIndex::distinct_count() const { return this->value_to_tuples.size(); }
+bool ColumnIndex::has_cooccurrence_tracking() const { return !this->co_occurrences.empty(); }
+
+// --- CSVIndex Implementation ---
+
+CSVIndex::CSVIndex() : num_tuples(0) {}
+
+// --- Index Building ---
+bool CSVIndex::load_from_csv(const std::string& filename) {
+    return load_from_csv(filename, false);
+}
+
+bool CSVIndex::load_from_csv(const std::string& filename, bool parallel_build) {
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+
+    // Reset previous state
+    column_indexes.clear();
+    column_values.clear();
+    num_tuples = 0;
+
+    io::LineReader lr(filename.c_str());
+    char* header = lr.next_line();
+    if (!header) {
+        std::cerr << "Error: Empty file" << std::endl;
+        return false;
+    }
+
+    // Parse header
+    {
+        size_t col_idx = 0;
+        char* p = header;
+        while (*p) {
+            char* start = p;
+            while (*p && *p != ',') ++p;
+            std::string name(start, p - start);
+            size_t a = name.find_first_not_of(" \t\r\n");
+            size_t b = name.find_last_not_of(" \t\r\n");
+            if (a == std::string::npos) name.clear(); else name = name.substr(a, b - a + 1);
+            if (name.empty()) name = "col" + std::to_string(col_idx + 1);
+            column_indexes.emplace_back(col_idx++, name);
+            if (*p == ',') ++p; else break;
+        }
+    }
+
+    if (column_indexes.empty()) {
+        std::cerr << "Error: No columns found in header" << std::endl;
+        return false;
+    }
+
+    std::cout << "Found " << column_indexes.size() << " columns: ";
+    for (size_t i = 0; i < column_indexes.size(); ++i) {
+        std::cout << column_indexes[i].name << (i + 1 < column_indexes.size() ? ", " : "\n");
+    }
+
+    column_values.resize(column_indexes.size());
+    const size_t num_cols = column_indexes.size();
+
+    // Row ingestion phase (only build row vectors)
+    char* line = nullptr;
+    uint32_t row_id = 0;
+    while ((line = lr.next_line())) {
+        if (*line == '\0') continue; // skip empty
+        char* p = line;
+        size_t col = 0;
+        while (col < num_cols) {
+            char* start = p;
+            while (*p && *p != ',') ++p;
+            uint32_t value = 0;
+            for (char* d = start; d < p; ++d) {
+                if (*d >= '0' && *d <= '9') value = value * 10 + static_cast<uint32_t>(*d - '0');
+                else if (*d == ' ' || *d == '\t') continue; // ignore whitespace
+                else { value = 0; break; }
+            }
+            column_values[col].push_back(value);
+            ++col;
+            if (*p == ',') { ++p; } else break;
+        }
+        while (col < num_cols) { // pad short lines
+            column_values[col].push_back(0);
+            ++col;
+        }
+        ++row_id;
+    }
+    num_tuples = row_id;
+
+    auto t1 = clock::now();
+    row_build_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+
+    // Index build phase (always after ingestion)
+    auto build_one = [this](size_t cidx) {
+        ColumnIndex& col = column_indexes[cidx];
+        col.value_to_tuples.clear();
+        const auto& vals = column_values[cidx];
+        for (uint32_t tid = 0; tid < vals.size(); ++tid) {
+            col.value_to_tuples[vals[tid]].add(tid);
+        }
+    };
+
+    if (parallel_build) {
+        std::vector<std::future<void>> tasks;
+        tasks.reserve(column_indexes.size());
+        for (size_t i = 0; i < column_indexes.size(); ++i) {
+            tasks.emplace_back(std::async(std::launch::async, build_one, i));
+        }
+        for (auto& f : tasks) f.get();
+    } else {
+        for (size_t i = 0; i < column_indexes.size(); ++i) build_one(i);
+    }
+
+    auto t2 = clock::now();
+    index_build_ms = std::chrono::duration<double, std::milli>(t2 - t1).count();
+
+    std::cout << "Loaded " << num_tuples << " tuples" << std::endl;
+    std::cout << "Row phase: " << row_build_ms << " ms, Index phase: " << index_build_ms << " ms" << std::endl;
+    return true;
+}
+
+// --- Memory & Internals ---
+size_t CSVIndex::get_memory_usage() const {
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    // ru_maxrss is in kilobytes on Linux, bytes on macOS
+#ifdef __APPLE__
+    return usage.ru_maxrss;  // bytes on macOS
+#else
+    return usage.ru_maxrss * 1024;  // convert KB to bytes on Linux
+#endif
+}
+
+// --- Co-occurrence ---
+void CSVIndex::build_cooccurrence(size_t col_idx, const std::vector<size_t>& tracking_columns) {
+    if (col_idx >= column_indexes.size()) {
+        std::cerr << "Error: Column index " << col_idx << " out of range" << std::endl;
+        return;
+    }
+    
+    ColumnIndex& col = column_indexes[col_idx];
+    
+    // Clear any existing co-occurrence data
+    col.co_occurrences.clear();
+    
+    std::cout << "Building co-occurrence for Column " << col.index << " (" << col.name 
+              << ") with columns: ";
+    for (size_t i = 0; i < tracking_columns.size(); ++i) {
+        if (i > 0) std::cout << ", ";
+        std::cout << tracking_columns[i];
+    }
+    std::cout << std::endl;
+    
+    // Fast path using row-wise values to avoid bitmap cross-products
+    for (const auto& [value, bitmap] : col.value_to_tuples) {
+        auto& value_cooccur = col.co_occurrences[value];
+        for (uint32_t tuple_id : bitmap) {
+            for (size_t other_col_idx : tracking_columns) {
+                if (other_col_idx >= column_indexes.size() || other_col_idx == col_idx) continue;
+                // Guard against malformed rows
+                if (other_col_idx >= column_values.size() || tuple_id >= column_values[other_col_idx].size()) continue;
+                uint32_t other_val = column_values[other_col_idx][tuple_id];
+                value_cooccur[other_col_idx].insert(other_val);
+            }
+        }
+    }
+    
+    std::cout << "Co-occurrence tracking built successfully" << std::endl;
+}
+
+// --- Printing & Debug (bottom) ---
+void CSVIndex::print_stats() const {
+    std::cout << "\n=== CSV Index Statistics ===" << std::endl;
+    std::cout << "Total tuples: " << num_tuples << std::endl;
+    std::cout << "Total columns: " << column_indexes.size() << std::endl;
+    std::cout << "\nPer-column statistics:" << std::endl;
+    for (size_t i = 0; i < column_indexes.size(); ++i) {
+        const auto& col = column_indexes[i];
+        std::cout << "  Column " << col.index << " (" << col.name << "):" << std::endl;
+        std::cout << "    Distinct values: " << col.distinct_count() << std::endl;
+        size_t total_cardinality = 0;
+        for (const auto& [value, bitmap] : col.value_to_tuples) total_cardinality += bitmap.cardinality();
+        std::cout << "    Total bitmap cardinality: " << total_cardinality << std::endl;
+        if (!col.value_to_tuples.empty()) {
+            std::cout << "    Sample values: ";
+            int count = 0;
+            for (const auto& [value, bitmap] : col.value_to_tuples) {
+                if (count++ >= 5) break;
+                std::cout << value << " (" << bitmap.cardinality() << " tuples)";
+                if (count < 5 && count < col.value_to_tuples.size()) std::cout << ", ";
+            }
+            std::cout << std::endl;
+        }
+    }
+}
+
+void CSVIndex::print_column(size_t col_idx) const {
+    const ColumnIndex* col = get_column(col_idx);
+    if (col) col->print();
+    else std::cerr << "Error: Column index " << col_idx << " out of range" << std::endl;
+}
+
+void CSVIndex::print_column(const std::string& col_name) const {
+    const ColumnIndex* col = get_column(col_name);
+    if (col) col->print();
+    else std::cerr << "Error: Column '" << col_name << "' not found" << std::endl;
+}
+
+void CSVIndex::print_cooccurrence(size_t col_idx) const {
+    const ColumnIndex* col = get_column(col_idx);
+    if (col) col->print_cooccurrences();
+    else std::cerr << "Error: Column index " << col_idx << " out of range" << std::endl;
+}
+
+void ColumnIndex::print() const {
+    std::cout << "\n=== Column " << index << " (" << name << ") ===" << std::endl;
+    std::cout << "Distinct values: " << distinct_count() << std::endl;
+    std::cout << "\nValue -> Tuple IDs:" << std::endl;
+    for (const auto& [value, bitmap] : this->value_to_tuples) {
+        std::cout << "  " << value << " -> [";
+        bool first = true;
+        for (uint32_t tuple_id : bitmap) {
+            if (!first) std::cout << ", ";
+            std::cout << tuple_id;
+            first = false;
+        }
+        std::cout << "]" << std::endl;
+    }
+}
+
+void ColumnIndex::print_cooccurrences() const {
+    if (this->co_occurrences.empty()) { std::cout << "No co-occurrence tracking for this column" << std::endl; return; }
+    std::cout << "\n=== Co-occurrence for Column " << index << " (" << name << ") ===" << std::endl;
+    for (const auto& [value, col_map] : co_occurrences) {
+        std::cout << "Value " << value << ":" << std::endl;
+        for (const auto& [other_col_idx, value_set] : col_map) {
+            std::cout << "  With Column " << other_col_idx << ": {";
+            bool first = true;
+            for (uint32_t co_val : value_set) { if (!first) std::cout << ", "; std::cout << co_val; first = false; }
+            std::cout << "}" << std::endl;
+        }
+    }
+}
+
+// --- Sorting & Output ---
+
+const std::vector<std::vector<uint32_t>>& CSVIndex::values() const { return column_values; }
+
