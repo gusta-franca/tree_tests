@@ -191,6 +191,7 @@ def introduce_noise_typo(
 def create_zipf_lambda(a, n):
     return lambda: (min(np.random.zipf(a), n) - 1) / n
 
+
 def create_beta_lambda(a, b):
     return lambda: random.betavariate(a, b)
 

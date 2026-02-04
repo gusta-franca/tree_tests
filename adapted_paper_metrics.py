@@ -67,11 +67,6 @@ def pdep(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:
     x_counts = df.loc[:, lhs].value_counts().reset_index()
     x_counts.columns = lhs + ["x_count"]
     
-    # xy_counts = df.groupby(combined_columns, sort = False).size().reset_index(name="xy_count")
-    
-    # x_counts = xy_counts.groupby(lhs, sort = False)["xy_count"].sum().reset_index(name="x_count")
-    
-
     counts = xy_counts.merge(x_counts, on=lhs)
 
     return (1 / df.shape[0]) * (counts["xy_count"].pow(2) / counts["x_count"]).sum()

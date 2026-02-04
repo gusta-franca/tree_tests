@@ -5,7 +5,7 @@ import ast
 import subprocess
 
 import adapted_paper_metrics
-from synthetic_data.generator import generate_SYN
+from benchmark.mu_plus import run_benchmark
 
 def parse_fds(fds_file):
     """Parse FDs from .fds file with format: (["col1","col2"],"target")"""
@@ -210,77 +210,9 @@ def run_experiment(dataset_csv_file, fds_input_file, metric = "mu_plus"):
 
 if __name__ == "__main__":
     
-    real_data_path = "./data/itaxlarge.csv"
-    real_fds_path = "./data/itax_pyro.fds"
+    run_benchmark();
+    
+    # real_data_path = "./data/itaxlarge.csv"
+    # real_fds_path = "./data/itax_pyro.fds"
         
-    run_experiment(real_data_path, real_fds_path)
-            
-
-# if __name__ == "__main__": 
-#     dataset_csv_file = "./data/itaxlarge.csv"
-#     fds_input_file = "./data/itax_pyro.fds"
-    
-#     dataset_name = os.path.basename(dataset_csv_file).replace(".csv", "")
-#     fds_name = os.path.basename(fds_input_file).replace(".fds", "")
-    
-#     metric = "mu_plus"  # Choose: 'mu' or 'mu_plus'
-    
-#     python_output = f"./data/{dataset_name}_{fds_name}_python"
-#     cpp_output = f"./data/{dataset_name}_{fds_name}_cpp.csv"
-#     cpp_opt_output = f"./data/{dataset_name}_{fds_name}_cpp_opt.csv"
-    
-#     print(f"\n{'='*60}")
-#     print(f"FD Metrics Comparison: {dataset_name} with {fds_name}")
-#     print(f"Metric: {metric}")
-#     print(f"{'='*60}")
-    
-#     # Run Python
-#     python_result = run_metrics(dataset_csv_file, fds_input_file, python_output, metric)
-#     print(f"Python total: {python_result['total_time']:.2f}s")
-    
-#     # Run C++ (with indexing)
-#     cpp_result = run_cpp_metrics(dataset_csv_file, fds_input_file, cpp_output, metric)
-#     if cpp_result['success']:
-#         print(f"C++ (indexed) total: {cpp_result['total_time']:.2f}s")
-    
-#     # Run C++ Optimized (no indexing)
-#     cpp_opt_result = run_cpp_metrics_optimized(dataset_csv_file, fds_input_file, cpp_opt_output, metric)
-#     if cpp_opt_result['success']:
-#         print(f"C++ (optimized) total: {cpp_opt_result['total_time']:.2f}s")
-    
-#     # Print summary
-#     print(f"\n{'='*60}")
-#     print("Performance Summary:")
-#     print(f"\n  Python:")
-#     print(f"    CSV load:   {python_result['load_time']:.3f}s")
-#     print(f"    Compute:    {python_result['compute_time']:.3f}s")
-#     print(f"    Total:      {python_result['total_time']:.3f}s")
-    
-#     if cpp_result['success']:
-#         print(f"\n  C++ (indexed):")
-#         print(f"    Total:      {cpp_result['total_time']:.3f}s  ({python_result['total_time']/cpp_result['total_time']:.2f}x vs Python)")
-#         print(f"                (includes ~0.5s index build + ~0.2s compute)")
-    
-#     if cpp_opt_result['success']:
-#         print(f"\n  C++ (optimized):")
-#         print(f"    Total:      {cpp_opt_result['total_time']:.3f}s  ({python_result['total_time']/cpp_opt_result['total_time']:.2f}x vs Python)")
-#         print(f"                (includes ~0.8s CSV load + ~0.2s compute)")
-#         if cpp_result['success']:
-#             print(f"    Speedup:    {cpp_result['total_time']/cpp_opt_result['total_time']:.2f}x vs indexed")
-    
-#     print(f"\n  Key Insight:")
-#     print(f"    - Pandas load ({python_result['load_time']:.3f}s) is FASTER than C++ index build (~0.5s)")
-#     print(f"    - C++ optimized compute (~0.2s) is FASTER than Pandas compute ({python_result['compute_time']:.3f}s)")
-#     print(f"{'='*60}")
-    
-#     # Compare results
-#     if cpp_result['success']:
-#         print("\nComparing Python vs C++ (indexed):")
-#         compare_results(python_result['fds_csv_file'], cpp_result['output_file'], metric)
-    
-#     if cpp_opt_result['success']:
-#         print("\nComparing Python vs C++ (optimized):")
-#         compare_results(python_result['fds_csv_file'], cpp_opt_result['output_file'], metric)
-    
-#     print()
-
+    # run_experiment(real_data_path, real_fds_path)
