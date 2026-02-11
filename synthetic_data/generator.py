@@ -12,55 +12,116 @@ def assign_fds(settings: Dict[str, Any]) -> Dict[int, int]:
     If a functional dependency tables shall be created, we need to create a dictionary first. This dictionary will represent that true functional dependency assignment between the LHS and the RHS. For each value from the domain of the LHS, a value from the RHS domain will be drawn according to the RHS distribution.
     """
 
-    dictionary = {}
-    for left in range(settings["lhs_cardinality"]):
-        dictionary[left] = int(
-            (settings["rhs_cardinality"]) * settings["rhs_distribution"]()
-        )
+    # dictionary = {}
+    # for left in range(settings["lhs_cardinality"]):
+    #     dictionary[left] = int(
+    #         (settings["rhs_cardinality"]) * settings["rhs_distribution"]()
+    #     )
 
-    return dictionary
+    # return dictionary
+    
+    data = settings["rhs_distribution"](size = settings["lhs_cardinality"])
+    
+    return (data * settings["rhs_cardinality"]).astype(np.int32)
 
 
-def generate_tuples(
-    settings: Dict[str, Any], fd_dictionary: Optional[Dict[int, int]]
-) -> Dict[int, List[int]]:
+def generate_tuples(settings: Dict[str, Any], fd_table: Optional[np.ndarray]):
     """## Generate tuples
     To generate a tuple, draw a value from the LHS domain according to the LHS distribution. If a FD dictionary is in use, choose the RHS value according to this dictionary. Otherwise, draw a random value from the RHS domain according to the RHS distribution.
     """
 
-    values = {0: [], 1: []}
-    for _ in range(settings["tuples"]):
-        left = int((settings["lhs_cardinality"]) * settings["lhs_distribution"]())
-        values[0].append(left)
-        if fd_dictionary:
-            values[1].append(fd_dictionary[left])
-        else:
-            values[1].append(
-                int((settings["rhs_cardinality"]) * settings["rhs_distribution"]())
-            )
-    return values
+    # values = {0: [], 1: []}
+    # for _ in range(settings["tuples"]):
+    #     left = int((settings["lhs_cardinality"]) * settings["lhs_distribution"]())
+    #     values[0].append(left)
+    #     if fd_dictionary:
+    #         values[1].append(fd_dictionary[left])
+    #     else:
+    #         values[1].append(
+    #             int((settings["rhs_cardinality"]) * settings["rhs_distribution"]())
+    #         )
+    # return values
+    
+    size = settings["tuples"]
+    
+    lhs = settings["lhs_distribution"](size = size)
+    lhs_values = (lhs * settings["lhs_cardinality"]).astype(np.int32)
+    
+    if fd_table is not None:
+        rhs_values = fd_table[lhs_values]    
+    else:
+        rhs = settings["rhs_distribution"](size = size)
+        rhs_values = (rhs * settings["rhs_cardinality"]).astype(np.int32)
+    
+    return {0: lhs_values, 1: rhs_values}
 
 
-def get_noise_potential(
-    settings: Dict[str, Any], values: Dict[int, List[int]]
-) -> float:
-    """
-    Return the potential percentage of noise that can be introduced to a dataset.
-    Values is assumed to be a dictionary with keys 0 and 1, where 0 is the LHS and 1 is the RHS.
-    """
-    return get_noise_potential_df(pd.DataFrame(values), 0, 1)
+# def get_noise_potential(
+#     settings: Dict[str, Any], values: Dict[int, List[int]]
+# ) -> float:
+#     """
+#     Return the potential percentage of noise that can be introduced to a dataset.
+#     Values is assumed to be a dictionary with keys 0 and 1, where 0 is the LHS and 1 is the RHS.
+#     """
+#     return get_noise_potential_df(pd.DataFrame(values), 0, 1)
 
 
-def get_noise_potential_df(df: pd.DataFrame, lhs: Any, rhs: Any) -> float:
-    """
-    Return the potential percentage of noise that can be introduced to a dataset.
-    """
-    df = df.loc[:, [lhs, rhs]].dropna(how="any")
-    counts = df.loc[:, lhs].value_counts()
-    potentials = counts.loc[
-        (counts // 2) > 0
-    ]  # if we change more than half the values, we are decreasing noise again
-    return (potentials // 2).sum() / df.shape[0]
+# def get_noise_potential_df(df: pd.DataFrame, lhs: Any, rhs: Any) -> float:
+#     """
+#     Return the potential percentage of noise that can be introduced to a dataset.
+#     """
+#     df = df.loc[:, [lhs, rhs]].dropna(how="any")
+#     counts = df.loc[:, lhs].value_counts()
+#     potentials = counts.loc[
+#         (counts // 2) > 0
+#     ]  # if we change more than half the values, we are decreasing noise again
+#     return (potentials // 2).sum() / df.shape[0]
+
+def get_noise_potential(values: Dict[int, np.ndarray]) -> float:
+ 
+    lhs_array = values[0]
+    
+    _, counts = np.unique(lhs_array, return_counts = True)
+    
+    max_potential_rows = np.sum(counts // 2)
+    
+    return float(max_potential_rows / len(lhs_array))
+
+
+def potential_noisy_indices(values: Dict[int, np.ndarray], noisy_k: int) -> np.ndarray:
+    # """
+    # Identify all LHS values that bear potential to introduce noise into the dataset df. Returns a list of noisy_k indices from df that can be used to introduce noise. Use this list to iterate through it and change the tuple according to some method for introducing noise.
+    # """
+    # X_counts = df.iloc[:, 0].value_counts()  # counts for each generated value from X
+    # # a list of potential X values to introduce noise to
+    # # i.e.: X values that appear at least two times
+    # potentials = X_counts.loc[(X_counts // 2) > 0] // 2
+    # # from the potentials, sample the X_values that will be changed in the following
+    # X_values = random.sample(
+    #     potentials.index.tolist(), k=noisy_k, counts=potentials.values.tolist()
+    # )
+    # return X_values
+    
+    lhs_array = values[0]
+    
+    unique_vals, counts = np.unique(lhs_array, return_counts = True)
+    
+    budget = counts // 2
+    mask = budget > 0
+    
+    candidates = unique_vals[mask]
+    weights = budget[mask].astype(np.float64)
+    
+    probabilities = weights / np.sum(weights)
+    
+    lhs_values = np.random.choice(
+        candidates, 
+        size = noisy_k, 
+        replace = True, 
+        p = probabilities
+    )
+    
+    return lhs_values
 
 
 def introduce_noise(
@@ -73,55 +134,76 @@ def introduce_noise(
     return introduce_noise_copy(settings, values)
 
 
-def potential_noisy_indices(df: pd.DataFrame, noisy_k: int) -> List[int]:
-    """
-    Identify all LHS values that bear potential to introduce noise into the dataset df. Returns a list of noisy_k indices from df that can be used to introduce noise. Use this list to iterate through it and change the tuple according to some method for introducing noise.
-    """
-    X_counts = df.iloc[:, 0].value_counts()  # counts for each generated value from X
-    # a list of potential X values to introduce noise to
-    # i.e.: X values that appear at least two times
-    potentials = X_counts.loc[(X_counts // 2) > 0] // 2
-    # from the potentials, sample the X_values that will be changed in the following
-    X_values = random.sample(
-        potentials.index.tolist(), k=noisy_k, counts=potentials.values.tolist()
-    )
-    return X_values
-
-
 def introduce_noise_copy(
     settings: Dict[str, Any], values: Dict[int, List[int]]
 ) -> Dict[int, List[int]]:
-    """
-    Introduce noise to a dataset.
-    To generate noise, identify all LHS values that occur at least twice. Get the frequency table of those values, take the half of it and sample a list of LHS values (which can occur multiple times) where noise will be introduced into. Identify tuples for each LHS value, and change their RHS value by picking randomly from all other possible RHS values (i.e. from all tuples where the LHS value is not equal to the one of the identified tuple).
-    """
-    noisy_k = int(settings["noise"] * settings["tuples"])
+    # """
+    # Introduce noise to a dataset.
+    # To generate noise, identify all LHS values that occur at least twice. Get the frequency table of those values, take the half of it and sample a list of LHS values (which can occur multiple times) where noise will be introduced into. Identify tuples for each LHS value, and change their RHS value by picking randomly from all other possible RHS values (i.e. from all tuples where the LHS value is not equal to the one of the identified tuple).
+    # """
+    # noisy_k = int(settings["noise"] * settings["tuples"])
+    # if noisy_k == 0:
+    #     return values  # nothing to do
+    # df = pd.DataFrame(values)
+    # try:
+    #     X_values = potential_noisy_indices(df, noisy_k)
+    # except ValueError:
+    #     logging.error(
+    #         f'It is not possible to introduce {settings["noise"]} noise to the dataset. Check the dataset with `get_noise_potential()` first.\n'
+    #     )
+    #     raise ValueError("Cannot create dataset, noise is set too high.")
+    # dirty_values = copy.deepcopy(values)
+    # Y_counts = df.iloc[:, 1].value_counts()  # counts for each generated value from Y
+    # for x, n in pd.Series(X_values).value_counts().items():
+    #     y_candidates = Y_counts[
+    #         Y_counts.index != x
+    #     ].copy()  # get all Y values that are not x
+    #     # get random indices of rows with the X value we want to change
+    #     indices_to_change = df.loc[df.iloc[:, 0] == x].sample(n=n).index
+    #     # an array of Y values to change the identified rows to (i.e. the noise)
+    #     # choosing from existing Y values hopefully maintains the Y distribution
+    #     y_values = random.choices(
+    #         y_candidates.index.tolist(), k=n, weights=y_candidates.values.tolist()
+    #     )
+    #     for i, x_index in enumerate(indices_to_change):
+    #         dirty_values[1][x_index] = y_values[i]
+    # return dirty_values
+    
+    size = settings["tuples"]
+    noisy_k = int(settings["noise"] * size)
+    
     if noisy_k == 0:
-        return values  # nothing to do
-    df = pd.DataFrame(values)
-    try:
-        X_values = potential_noisy_indices(df, noisy_k)
-    except ValueError:
-        logging.error(
-            f'It is not possible to introduce {settings["noise"]} noise to the dataset. Check the dataset with `get_noise_potential()` first.\n'
-        )
-        raise ValueError("Cannot create dataset, noise is set too high.")
-    dirty_values = copy.deepcopy(values)
-    Y_counts = df.iloc[:, 1].value_counts()  # counts for each generated value from Y
-    for x, n in pd.Series(X_values).value_counts().items():
-        y_candidates = Y_counts[
-            Y_counts.index != x
-        ].copy()  # get all Y values that are not x
-        # get random indices of rows with the X value we want to change
-        indices_to_change = df.loc[df.iloc[:, 0] == x].sample(n=n).index
-        # an array of Y values to change the identified rows to (i.e. the noise)
-        # choosing from existing Y values hopefully maintains the Y distribution
-        y_values = random.choices(
-            y_candidates.index.tolist(), k=n, weights=y_candidates.values.tolist()
-        )
-        for i, x_index in enumerate(indices_to_change):
-            dirty_values[1][x_index] = y_values[i]
-    return dirty_values
+        return values
+
+    lhs = potential_noisy_indices(values, noisy_k)
+    unique_x, counts_x = np.unique(lhs, return_counts = True)
+    
+    lhs_array = values[0]
+    idx_sort = np.argsort(lhs_array)
+    sorted_lhs = lhs_array[idx_sort]
+   
+    dirty_rhs = values[1].copy()
+
+    indices_to_change = []
+    
+    for x, n in zip(unique_x, counts_x):
+        start = np.searchsorted(sorted_lhs, x, side = 'left')
+        end = np.searchsorted(sorted_lhs, x, side = 'right')
+        
+        possible_row_indices = idx_sort[start:end]
+        
+        if len(possible_row_indices) >= n:
+            chosen_rows = np.random.choice(possible_row_indices, size = n, replace = False)
+            indices_to_change.extend(chosen_rows)
+
+    indices_to_change = np.array(indices_to_change)
+    
+    noise_pool = values[1]
+    new_rhs_values = np.random.choice(noise_pool, size = len(indices_to_change))
+
+    dirty_rhs[indices_to_change] = new_rhs_values
+
+    return {0: lhs_array, 1: dirty_rhs}
 
 
 def introduce_noise_bogus(
@@ -150,8 +232,8 @@ def introduce_noise_bogus(
                 bogus_value += 1
             dirty_values[1][x_index] = bogus_value
     return dirty_values
-
-
+    
+   
 def introduce_noise_typo(
     settings: Dict[str, Any], values: Dict[int, List[Any]], typos_n: int = 3
 ) -> Dict[int, List[int]]:
@@ -189,11 +271,10 @@ def introduce_noise_typo(
 
 
 def create_zipf_lambda(a, n):
-    return lambda: (min(np.random.zipf(a), n) - 1) / n
-
+    return lambda size = 1: (np.clip(np.random.zipf(a, size = size), 1, n) - 1) / n
 
 def create_beta_lambda(a, b):
-    return lambda: random.betavariate(a, b)
+    return lambda size = 1: np.random.beta(a, b, size = size)
 
 
 def generate_SYN(
@@ -227,17 +308,17 @@ def generate_SYN(
         "noise": noise
     }
     
-    fd_dictionary = None
+    fd_table = None
     
     if fd:
-        fd_dictionary = assign_fds(settings = settings)
+        fd_table = assign_fds(settings = settings)
         
-    clean_data = generate_tuples(settings = settings, fd_dictionary = fd_dictionary)
+    clean_data = generate_tuples(settings = settings, fd_table = fd_table)
     
     if fd:
         # make sure that noise can be introduced to the clean dataset
         safeguard = 10
-        while get_noise_potential(settings, clean_data) < settings["noise"]:
+        while get_noise_potential(clean_data) < settings["noise"]:
             clean_data = generate_tuples(settings = settings, fd_dictionary = fd_dictionary)
             safeguard -= 1
             if safeguard == 0:

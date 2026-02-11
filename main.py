@@ -6,7 +6,7 @@ import ast
 import subprocess
 
 import adapted_paper_metrics
-from benchmark import run_benchmark
+from benchmark import run_benchmarks
 
 def parse_fds(fds_file):
     """Parse FDs from .fds file with format: (["col1","col2"],"target")"""
@@ -213,7 +213,7 @@ if __name__ == "__main__":
     
     regenerate = "regenerate" in sys.argv
     
-    run_benchmark(regenerate)
+    run_benchmarks(regenerate)
     
     # real_data_path = "./data/itaxlarge.csv"
     # real_fds_path = "./data/itax_pyro.fds"

@@ -1,9 +1,10 @@
 import os
-import sys
 import tracemalloc
 import pandas as pd
 import time
 from typing import Any, Callable, Dict, List, Tuple
+
+import psutil
 
 from synthetic_data.generator import generate_SYN 
 from adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
@@ -57,50 +58,85 @@ def run_metric(
 ) -> Tuple[float, float, float]:
  
     tracemalloc.start()
+    memory_before, _ = tracemalloc.get_traced_memory()
+
     start_time = time.time()
     
     result = metric_func(**call_args)
     
     duration = time.time() - start_time
-    _, peak_mem = tracemalloc.get_traced_memory()
+    _, memory_peak = tracemalloc.get_traced_memory()
+    
+    memory_used = (memory_peak - memory_before) / (1024**2
+                                                   )
     tracemalloc.stop()
     
-    return result["result"], duration, (peak_mem / (1024**2))
-
-
-def run_benchmark(
-    metric_func: Callable[..., float], 
-    scenarios: List[Dict[str, Any]], 
-    metric_args: Dict[str, Any]
-    ) -> pd.DataFrame:
+    # process = psutil.Process(os.getpid())
+    # memory_before = process.memory_info().rss
     
+    # start_time = time.time()
+    
+    # result = metric_func(**call_args)
+    
+    # duration = time.time() - start_time
+    
+    # memory_after = process.memory_info().rss
+    
+    # memory_used = (memory_after - memory_before) / (1024**2)
+    
+    return result["result"], duration, memory_used
+
+
+def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
+
     results = []
-
+    output_path = "data/benchmark.csv"
+    
     for scenario in scenarios:
-        
         filepath = get_dataset_path(scenario)
+        if regenerate or not os.path.exists(filepath):
+            generate_dataset(scenario)
+            print(f"Saved {scenario["name"]} data on {filepath}")
         
-        start_load = time.time()
-        df = load_dataset(filepath)
-        time_load = time.time() - start_load
+        print()
         
-        call_args = {'df': df}
-        call_args.update(metric_args)
+        load_start = time.time()
+        df = pd.read_csv(filepath)
+        load_time = time.time() - load_start
         
-        metric_value, time_execution, memory_peak = run_metric(metric_func, call_args)
+        for metric_func, metric_args in metrics_config:
+            metric_name = metric_func.__name__
         
-        results.append({
-            "scenario": scenario["name"],
-            "tuples": scenario["tuples"],
-            "metric_value": metric_value,
-            "load_time(s)": round(time_load, 5),
-            "exec_time(s)": round(time_execution, 5),
-            "total_time(s)": round(time_load + time_execution, 5),
-            "memory_peak(MB)": memory_peak
-        })
+            print(f"Running tests for {scenario["name"]} scenario with {metric_name} metric")
+            
+            call_args = {'df': df}
+            call_args.update(metric_args)
+            
+            metric_value, execution_time, memory = run_metric(metric_func, call_args)
+            
+            results.append({
+                "scenario": scenario["name"],
+                "implementation": metric_name,
+                "tuples": scenario["tuples"],
+                "result_value": round(metric_value, 5),
+                "load_time(s)": round(load_time, 5),
+                "execution_time(s)": round(execution_time, 5),
+                "total_time(s)": round(load_time + execution_time, 5),
+                "memory(MB)": round(memory, 5),
+            })
+        
+    if results:
+        df_results = pd.DataFrame(results)
+        df_results.to_csv(output_path, index = False)
+        print(f"\nResults saved in {output_path}")
+        
+        return df_results
 
-    return pd.DataFrame(results)
-
+    else:
+        print("\nNo results")
+        
+        return pd.DataFrame()
+    
 
 scenarios = [
     {
@@ -108,10 +144,11 @@ scenarios = [
         "tuples": 100_000, 
         "dist_params": {
             "dist_type": "zipf", 
-            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_alpha": 2, 
             "lhs_dist_beta": 0, 
-            "rhs_dist_alpha": 1.01, 
-            "rhs_dist_beta": 0
+            "rhs_dist_alpha": 2, 
+            "rhs_dist_beta": 0,
+            "noise": 0.3
         }
     },
     {
@@ -119,10 +156,11 @@ scenarios = [
         "tuples": 1_000_000, 
         "dist_params": {
             "dist_type": "zipf", 
-            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_alpha": 2, 
             "lhs_dist_beta": 0, 
-            "rhs_dist_alpha": 1.01, 
-            "rhs_dist_beta": 0
+            "rhs_dist_alpha": 2, 
+            "rhs_dist_beta": 0,
+            "noise": 0.3
         }
     },
     {
@@ -133,20 +171,22 @@ scenarios = [
             "lhs_dist_alpha": 1.01,
             "lhs_dist_beta": 0, 
             "rhs_dist_alpha": 1.01, 
-            "rhs_dist_beta": 0
+            "rhs_dist_beta": 0,
+            "noise": 0.3
         }
     },
-    # {
-    #     "name": "zipf_100m", 
-    #     "tuples": 100_000_000, 
-    #     "dist_params": {
-    #         "dist_type": "zipf", 
-    #         "lhs_dist_alpha": 2, 
-    #         "lhs_dist_beta": 0, 
-    #         "rhs_dist_alpha": 2, 
-    #         "rhs_dist_beta": 0
-    #     }
-    # },
+    {
+        "name": "zipf_100m", 
+        "tuples": 100_000_000, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 2, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 2, 
+            "rhs_dist_beta": 0,
+            "noise": 0.3
+        }
+    },
     {
         "name": "beta_1m", 
         "tuples": 1_000_000, 
@@ -156,6 +196,7 @@ scenarios = [
             "lhs_dist_beta": 5.0, 
             "rhs_dist_alpha": 2.0,
             "rhs_dist_beta": 5.0,
+            "noise": 0.3
         }
     },
 ]
@@ -168,7 +209,13 @@ metrics_config = [
             "lhs": ["lhs"], 
             "rhs": "rhs"
         },
-        "data/mu_plus.csv"
+    ),
+    (
+        mu_plus_opt, 
+        {
+            "lhs": ["lhs"], 
+            "rhs": "rhs"
+        },
     ),
     # (
     #     reliable_fraction_of_information_prime_plus, 
@@ -176,34 +223,5 @@ metrics_config = [
     #         "lhs": ["lhs"], 
     #         "rhs": "rhs"
     #     }, 
-    #     "data/rfi_plus.csv"
     # ),
 ]
-
-
-def run_benchmark(regenerate: bool):
-    
-    regenerate = "regenerate" in sys.argv
-    
-    for scenario in scenarios:
-        filepath = get_dataset_path(scenario)
-        if regenerate or not os.path.exists(filepath):
-            generate_dataset(scenario)
-            print(f"Saved {scenario["name"]} data on {filepath}")
-            
-    for func, args, output_path in metrics_config:
-        df_res = run_benchmark(func, scenarios, args)
-        
-        df_res.to_csv(output_path, index = False)
-        print(f"Saved {func.__name__} results in {output_path}\n")
-    
-    # df_rfi_plus = run_benchmark(
-    #     metric_func = reliable_fraction_of_information_prime_plus,
-    #     scenarios = scenarios,
-    #     metric_args = {"lhs": ["lhs"], "rhs": "rhs"}
-    # )
-    
-    # output_rfi_plus = "data/rfi_plus.csv"
-    # df_rfi_plus.to_csv(output_rfi_plus, index = False)
-    
-    
