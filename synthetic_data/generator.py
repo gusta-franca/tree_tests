@@ -230,15 +230,15 @@ def generate_SYN(
     fd_dictionary = None
     
     if fd:
-        fd_dictionary = assign_fds(settings=settings)
+        fd_dictionary = assign_fds(settings = settings)
         
-    clean_data = generate_tuples(settings=settings, fd_dictionary=fd_dictionary)
+    clean_data = generate_tuples(settings = settings, fd_dictionary = fd_dictionary)
     
     if fd:
         # make sure that noise can be introduced to the clean dataset
         safeguard = 10
         while get_noise_potential(settings, clean_data) < settings["noise"]:
-            clean_data = generate_tuples(settings=settings, fd_dictionary=fd_dictionary)
+            clean_data = generate_tuples(settings = settings, fd_dictionary = fd_dictionary)
             safeguard -= 1
             if safeguard == 0:
                 raise ValueError(
