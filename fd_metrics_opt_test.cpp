@@ -1,15 +1,23 @@
 // fd_metrics_opt_test.cpp
 // Test program for optimized FD metrics computation
 
-#include "fd_metrics_opt.h"
+#include <iomanip>
 #include <iostream>
 #include <fstream>
-#include <iomanip>
+#include <sys/resource.h>
+#include "fd_metrics_opt.h"
 
 void print_usage(const char* prog_name) {
     std::cerr << "Usage: " << prog_name << " <csv_file> <fd_file> [-o output_file] [-m metric] [-v]" << std::endl;
     std::cerr << "  metric: mu_plus (default) or mu" << std::endl;
     std::cerr << "  -v: verbose output" << std::endl;
+}
+
+// Memory usage in KB
+long get_memory_usage() {
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    return usage.ru_maxrss; // in KB
 }
 
 int main(int argc, char* argv[]) {
@@ -19,42 +27,18 @@ int main(int argc, char* argv[]) {
     }
     
     std::string csv_file = argv[1];
-    std::string fd_file = argv[2];
-    std::string output_file;
-    std::string metric_str = "mu_plus";
+    std::string lhs_str = argv[2];
+    std::string rhs_str = argv[3];
+    MetricType metric_type = MetricType::MU_PLUS;
     bool verbose = false;
-    
-    // Parse optional arguments
-    for (int i = 3; i < argc; ++i) {
-        std::string arg = argv[i];
-        if (arg == "-o" && i + 1 < argc) {
-            output_file = argv[++i];
-        } else if (arg == "-m" && i + 1 < argc) {
-            metric_str = argv[++i];
-        } else if (arg == "-v") {
-            verbose = true;
-        }
+
+    FDSpec fd;
+    fd.rhs_column = rhs_str;
+    std::stringstream ss(lhs_str);
+    std::string col;
+    while (std::getline(ss, col, ',')) {
+        fd.lhs_columns.push_back(col);
     }
-    
-    MetricType metric = string_to_metric_type(metric_str);
-    
-    std::cout << "=== Optimized FD Metrics Computation ===" << std::endl;
-    std::cout << "CSV file: " << csv_file << std::endl;
-    std::cout << "FD file: " << fd_file << std::endl;
-    std::cout << "Metric: " << metric_type_to_string(metric) << std::endl;
-    std::cout << std::endl;
-    
-    // Load FD specifications
-    std::vector<FDSpec> fds;
-    if (!load_fds_file(fd_file, fds)) {
-        std::cerr << "Error: Failed to load FDs from file" << std::endl;
-        return 1;
-    }
-    if (fds.empty()) {
-        std::cerr << "Error: No FDs loaded from file" << std::endl;
-        return 1;
-    }
-    std::cout << "Loaded " << fds.size() << " FD specifications" << std::endl;
     
     // Load CSV data (no indexes!)
     ColumnarData data;
@@ -62,56 +46,21 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: Failed to load CSV file" << std::endl;
         return 1;
     }
-    
+
     // Compute metrics
-    auto results = compute_fd_metrics_opt(data, fds, metric, verbose);
+    long start_memory = get_memory_usage();
+    auto start = std::chrono::steady_clock::now();
     
-    // Write results
-    if (!output_file.empty()) {
-        std::ofstream out(output_file);
-        if (!out.is_open()) {
-            std::cerr << "Error: Cannot write to " << output_file << std::endl;
-            return 1;
-        }
-        
-        // Header
-        out << "lhs,rhs," << metric_type_to_string(metric) << ",is_key,lhs_size,"
-            << "lhs_uniqueness,pdep_xy,pdep_y,dom_x_size,r_size" << std::endl;
-        
-        // Data
-        for (const auto& result : results) {
-            out << "\"";
-            for (size_t i = 0; i < result.fd.lhs_columns.size(); ++i) {
-                out << result.fd.lhs_columns[i];
-                if (i + 1 < result.fd.lhs_columns.size()) out << ",";
-            }
-            out << "\",\"" << result.fd.rhs_column << "\","
-                << std::fixed << std::setprecision(6) << result.metric_value << ","
-                << (result.is_key ? "true" : "false") << ","
-                << result.lhs_size << ","
-                << result.lhs_uniqueness << ","
-                << result.pdep_xy << ","
-                << result.pdep_y << ","
-                << result.dom_x_size << ","
-                << result.r_size << std::endl;
-        }
-        
-        std::cout << "\nResults written to: " << output_file << std::endl;
-    }
+    FDMetricResult result = compute_single_fd_metric_opt(data, fd, metric_type, verbose);
     
-    // Summary
-    std::cout << "\n=== Results Summary ===" << std::endl;
-    for (const auto& result : results) {
-        std::cout << "[";
-        for (size_t i = 0; i < result.fd.lhs_columns.size(); ++i) {
-            std::cout << result.fd.lhs_columns[i];
-            if (i + 1 < result.fd.lhs_columns.size()) std::cout << ",";
-        }
-        std::cout << "] -> " << result.fd.rhs_column << ": "
-                  << metric_type_to_string(result.metric_type) << " = "
-                  << std::fixed << std::setprecision(3) << result.metric_value
-                  << (result.is_key ? " (KEY)" : "") << std::endl;
-    }
-    
+    auto end = std::chrono::steady_clock::now();
+    long end_memory = get_memory_usage();
+
+    std::chrono::duration<double> duration = end - start;
+    double memory_used = (start_memory - end_memory) / 1024.0;
+
+    // Print results
+    std::cout << result.metric_value << "," << duration.count() << "," << memory_used << std::endl;
+
     return 0;
 }

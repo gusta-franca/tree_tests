@@ -1,4 +1,6 @@
 import pandas as pd
+import resource
+import subprocess
 from typing import List, Any
 
 
@@ -42,3 +44,22 @@ def mu_plus_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:
         "lhs_uniqueness": lhs_uniqueness,
         "lhs_size": len(lhs),
     }
+    
+
+def cpp_mu_plus_opt(filepath: str, lhs: list[str], rhs: str):
+    
+    binary_path = "./fd_metrics_opt_test" 
+    
+    lhs_str = ",".join(lhs)
+    
+    cmd = [binary_path, filepath, lhs_str, rhs]
+    
+    result = subprocess.run(cmd, capture_output = True, text = True)
+
+    output = result.stdout.strip().split(',')
+    
+    metric_value = float(output[0])
+    execution_time = float(output[1])
+    memory_used = float(output[2])
+    
+    return metric_value, execution_time, memory_used

@@ -1,15 +1,14 @@
 import os
-import tracemalloc
 import pandas as pd
+import subprocess
 import time
-from typing import Any, Callable, Dict, List, Tuple
+import tracemalloc
+from typing import Any, Callable, Dict, Tuple
 
-import psutil
-
-from synthetic_data.generator import generate_SYN 
 from adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
-from opt_metrics.mu_plus_opt import mu_plus_opt
+from opt_metrics.mu_plus_opt import mu_plus_opt, cpp_mu_plus_opt
 # from opt_metrics.rfi_plus_opt import reliable_fraction_of_information_prime_plus_opt
+from synthetic_data.generator import generate_SYN 
 
 
 def get_dataset_path(scenario: Dict[str, Any]) -> str:
@@ -54,8 +53,12 @@ def load_dataset(filepath: str) -> pd.DataFrame:
 
 def run_metric(
     metric_func: Callable[..., float], 
-    call_args: Dict[str, Any]
+    call_args: Dict[str, Any],
+    is_cpp: bool = False
 ) -> Tuple[float, float, float]:
+    
+    if is_cpp:
+        return metric_func(**call_args)
  
     tracemalloc.start()
     memory_before, _ = tracemalloc.get_traced_memory()
@@ -71,20 +74,8 @@ def run_metric(
                                                    )
     tracemalloc.stop()
     
-    # process = psutil.Process(os.getpid())
-    # memory_before = process.memory_info().rss
-    
-    # start_time = time.time()
-    
-    # result = metric_func(**call_args)
-    
-    # duration = time.time() - start_time
-    
-    # memory_after = process.memory_info().rss
-    
-    # memory_used = (memory_after - memory_before) / (1024**2)
-    
     return result["result"], duration, memory_used
+
 
 
 def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
@@ -96,9 +87,7 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
         filepath = get_dataset_path(scenario)
         if regenerate or not os.path.exists(filepath):
             generate_dataset(scenario)
-            print(f"Saved {scenario["name"]} data on {filepath}")
-        
-        print()
+            print(f"\nSaved {scenario["name"]} data on {filepath}\n")
         
         load_start = time.time()
         df = pd.read_csv(filepath)
@@ -106,23 +95,28 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
         
         for metric_func, metric_args in metrics_config:
             metric_name = metric_func.__name__
-        
-            print(f"Running tests for {scenario["name"]} scenario with {metric_name} metric")
             
-            call_args = {'df': df}
+            is_cpp = metric_name.startswith("cpp")
+        
+            print(f"Running tests for {scenario["name"]} scenario with {metric_name}")
+            
+            call_args = {"df": df}
             call_args.update(metric_args)
             
-            metric_value, execution_time, memory = run_metric(metric_func, call_args)
+            if is_cpp:
+                call_args["filepath"] = filepath
+                call_args.pop("df")
+                            
+            metric_value, execution_time, memory_used = run_metric(metric_func, call_args, is_cpp)
             
             results.append({
                 "scenario": scenario["name"],
                 "implementation": metric_name,
-                "tuples": scenario["tuples"],
                 "result_value": round(metric_value, 5),
                 "load_time(s)": round(load_time, 5),
                 "execution_time(s)": round(execution_time, 5),
                 "total_time(s)": round(load_time + execution_time, 5),
-                "memory(MB)": round(memory, 5),
+                "memory_used(MB)": round(memory_used, 5),
             })
         
     if results:
@@ -152,8 +146,8 @@ scenarios = [
         }
     },
     {
-        "name": "zipf_1m", 
-        "tuples": 1_000_000, 
+        "name": "zipf_110k", 
+        "tuples": 110_000, 
         "dist_params": {
             "dist_type": "zipf", 
             "lhs_dist_alpha": 2, 
@@ -164,8 +158,8 @@ scenarios = [
         }
     },
     {
-        "name": "zipf_10m", 
-        "tuples": 10_000_000, 
+        "name": "zipf_120k", 
+        "tuples": 120_000, 
         "dist_params": {
             "dist_type": "zipf", 
             "lhs_dist_alpha": 1.01,
@@ -175,30 +169,30 @@ scenarios = [
             "noise": 0.3
         }
     },
-    {
-        "name": "zipf_100m", 
-        "tuples": 100_000_000, 
-        "dist_params": {
-            "dist_type": "zipf", 
-            "lhs_dist_alpha": 2, 
-            "lhs_dist_beta": 0, 
-            "rhs_dist_alpha": 2, 
-            "rhs_dist_beta": 0,
-            "noise": 0.3
-        }
-    },
-    {
-        "name": "beta_1m", 
-        "tuples": 1_000_000, 
-        "dist_params": {
-            "dist_type": "beta",
-            "lhs_dist_alpha": 2.0,
-            "lhs_dist_beta": 5.0, 
-            "rhs_dist_alpha": 2.0,
-            "rhs_dist_beta": 5.0,
-            "noise": 0.3
-        }
-    },
+    # {
+    #     "name": "zipf_100m", 
+    #     "tuples": 100_000_000, 
+    #     "dist_params": {
+    #         "dist_type": "zipf", 
+    #         "lhs_dist_alpha": 2, 
+    #         "lhs_dist_beta": 0, 
+    #         "rhs_dist_alpha": 2, 
+    #         "rhs_dist_beta": 0,
+    #         "noise": 0.3
+    #     }
+    # },
+    # {
+    #     "name": "beta_1m", 
+    #     "tuples": 1_000_000, 
+    #     "dist_params": {
+    #         "dist_type": "beta",
+    #         "lhs_dist_alpha": 2.0,
+    #         "lhs_dist_beta": 5.0, 
+    #         "rhs_dist_alpha": 2.0,
+    #         "rhs_dist_beta": 5.0,
+    #         "noise": 0.3
+    #     }
+    # },
 ]
 
 
@@ -217,11 +211,18 @@ metrics_config = [
             "rhs": "rhs"
         },
     ),
-    # (
-    #     reliable_fraction_of_information_prime_plus, 
-    #     {
-    #         "lhs": ["lhs"], 
-    #         "rhs": "rhs"
-    #     }, 
-    # ),
+    (
+        cpp_mu_plus_opt, 
+        {
+            "lhs": ["lhs"], 
+            "rhs": "rhs"
+        }, 
+    ),
+    (
+        reliable_fraction_of_information_prime_plus, 
+        {
+            "lhs": ["lhs"], 
+            "rhs": "rhs"
+        }, 
+    ),
 ]
