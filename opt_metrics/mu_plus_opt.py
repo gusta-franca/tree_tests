@@ -46,13 +46,13 @@ def mu_plus_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:
     }
     
 
-def cpp_mu_plus_opt(filepath: str, lhs: list[str], rhs: str):
+def cpp_mu_plus_opt(filepath: str, lhs: list[str], rhs: str, algo: str = "auto"):
     
     binary_path = "./fd_metrics_opt_test" 
     
     lhs_str = ",".join(lhs)
     
-    cmd = [binary_path, filepath, lhs_str, rhs]
+    cmd = [binary_path, filepath, lhs_str, rhs, algo]
     
     result = subprocess.run(cmd, capture_output = True, text = True)
 

@@ -11,6 +11,7 @@
 #include <sstream>
 #include <chrono>
 #include <cmath>
+#include <sys/resource.h>
 
 // Helper functions
 std::string metric_type_to_string(MetricType type) {
@@ -312,12 +313,19 @@ namespace {
     
 } // anonymous namespace
 
+long get_memory_usage() {
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    return usage.ru_maxrss;
+}
+
 // Main computation function with strategy selection
 FDMetricResult compute_single_fd_metric_opt(
     const ColumnarData& data,
     const FDSpec& fd,
     MetricType metric_type,
-    bool verbose) {
+    bool verbose,
+    const std::string& algo) {
     
     FDMetricResult result;
     result.fd = fd;
@@ -329,6 +337,9 @@ FDMetricResult compute_single_fd_metric_opt(
         std::cout << "\n  Computing " << metric_type_to_string(metric_type) << " for FD: ";
         fd.print();
     }
+
+    long start_memory = get_memory_usage();
+    auto start_time = std::chrono::steady_clock::now();
     
     // Get column indices
     std::vector<size_t> lhs_indices;
@@ -358,7 +369,7 @@ FDMetricResult compute_single_fd_metric_opt(
     
     // Use bitmap only for very small cardinality products
     // The bitmap approach iterates through Cartesian products which is expensive
-    bool use_bitmap = (total_lhs_card * rhs_card < 1000) && (lhs_indices.size() == 1);
+    bool use_bitmap = false;
     
     if (verbose) {
         std::cout << "  Strategy: " << (use_bitmap ? "Bitmap-based" : "Hash-based") << std::endl;
@@ -366,6 +377,14 @@ FDMetricResult compute_single_fd_metric_opt(
     
     // Compute pdep(X,Y)
     auto t1 = std::chrono::steady_clock::now();
+
+    if (algo == "bitmap") 
+        use_bitmap = true;
+    else if (algo == "hash") 
+        use_bitmap = false;
+    else 
+        use_bitmap = (total_lhs_card * rhs_card < 1000) && (lhs_indices.size() == 1);
+    
     if (use_bitmap) {
         result.pdep_xy = compute_pdep_bitmap(data, lhs_indices, rhs_idx, 
                                              result.dom_x_size, result.lhs_uniqueness);
@@ -373,6 +392,7 @@ FDMetricResult compute_single_fd_metric_opt(
         result.pdep_xy = compute_pdep_hash(data, lhs_indices, rhs_idx,
                                            result.dom_x_size, result.lhs_uniqueness);
     }
+
     auto t2 = std::chrono::steady_clock::now();
     
     // Compute pdep(Y)
@@ -398,6 +418,15 @@ FDMetricResult compute_single_fd_metric_opt(
             result.metric_value = std::max(mu, 0.0);
         }
     }
+
+    auto end_time = std::chrono::steady_clock::now();
+    long end_memory = get_memory_usage();
+
+    std::chrono::duration<double> duration = end_time - start_time;
+    double memory_used = (end_memory - start_memory) / 1024.0;
+
+    // Print results
+    std::cout << result.metric_value << "," << duration.count() << "," << memory_used << std::endl;
     
     if (verbose) {
         auto pdep_xy_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();

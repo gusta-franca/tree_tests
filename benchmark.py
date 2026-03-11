@@ -93,9 +93,7 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
         df = pd.read_csv(filepath)
         load_time = time.time() - load_start
         
-        for metric_func, metric_args in metrics_config:
-            metric_name = metric_func.__name__
-            
+        for metric_name, metric_func, metric_args in metrics_config:            
             is_cpp = metric_name.startswith("cpp")
         
             print(f"Running tests for {scenario["name"]} scenario with {metric_name}")
@@ -135,7 +133,7 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
 scenarios = [
     {
         "name": "zipf_100k", 
-        "tuples": 100_000, 
+        "tuples": 100_000,
         "dist_params": {
             "dist_type": "zipf", 
             "lhs_dist_alpha": 2, 
@@ -169,18 +167,30 @@ scenarios = [
             "noise": 0.3
         }
     },
-    # {
-    #     "name": "zipf_100m", 
-    #     "tuples": 100_000_000, 
-    #     "dist_params": {
-    #         "dist_type": "zipf", 
-    #         "lhs_dist_alpha": 2, 
-    #         "lhs_dist_beta": 0, 
-    #         "rhs_dist_alpha": 2, 
-    #         "rhs_dist_beta": 0,
-    #         "noise": 0.3
-    #     }
-    # },
+    {
+        "name": "zipf_1m", 
+        "tuples": 1_000_000, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 2, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 2, 
+            "rhs_dist_beta": 0,
+            "noise": 0.3
+        }
+    },
+    {
+        "name": "zipf_100m", 
+        "tuples": 100_000_000, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 2, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 2, 
+            "rhs_dist_beta": 0,
+            "noise": 0.3
+        }
+    },
     # {
     #     "name": "beta_1m", 
     #     "tuples": 1_000_000, 
@@ -197,32 +207,54 @@ scenarios = [
 
 
 metrics_config = [
+    # (
+    #     "py_mu_plus",
+    #     mu_plus, 
+    #     {
+    #         "lhs": ["lhs"], 
+    #         "rhs": "rhs"
+    #     },
+    # ),
+    # (
+    #     "py_mu_plus_opt",
+    #     mu_plus_opt, 
+    #     {
+    #         "lhs": ["lhs"], 
+    #         "rhs": "rhs"
+    #     },
+    # ),
     (
-        mu_plus, 
-        {
-            "lhs": ["lhs"], 
-            "rhs": "rhs"
-        },
-    ),
-    (
-        mu_plus_opt, 
-        {
-            "lhs": ["lhs"], 
-            "rhs": "rhs"
-        },
-    ),
-    (
+        "cpp_mu_plus_auto",
         cpp_mu_plus_opt, 
         {
             "lhs": ["lhs"], 
-            "rhs": "rhs"
+            "rhs": "rhs",
         }, 
     ),
     (
-        reliable_fraction_of_information_prime_plus, 
+        "cpp_mu_plus_bitmap",
+        cpp_mu_plus_opt, 
         {
             "lhs": ["lhs"], 
-            "rhs": "rhs"
+            "rhs": "rhs",
+            "algo": "bitmap"
         }, 
     ),
+    (
+        "cpp_mu_plus_hash",
+        cpp_mu_plus_opt, 
+        {
+            "lhs": ["lhs"], 
+            "rhs": "rhs",
+            "algo": "hash"
+        }, 
+    ),
+    # (
+    #     "rfi_prime_plus"
+    #     reliable_fraction_of_information_prime_plus, 
+    #     {
+    #         "lhs": ["lhs"], 
+    #         "rhs": "rhs"
+    #     }, 
+    # ),
 ]

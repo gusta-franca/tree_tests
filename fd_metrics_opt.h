@@ -50,7 +50,8 @@ FDMetricResult compute_single_fd_metric_opt(
     const ColumnarData& data,
     const FDSpec& fd,
     MetricType metric_type,
-    bool verbose = false);
+    bool verbose = false,
+    const std::string& algo = "auto");
 
 std::vector<FDMetricResult> compute_fd_metrics_opt(
     const ColumnarData& data,

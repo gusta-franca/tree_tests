@@ -13,12 +13,6 @@ void print_usage(const char* prog_name) {
     std::cerr << "  -v: verbose output" << std::endl;
 }
 
-// Memory usage in KB
-long get_memory_usage() {
-    struct rusage usage;
-    getrusage(RUSAGE_SELF, &usage);
-    return usage.ru_maxrss; // in KB
-}
 
 int main(int argc, char* argv[]) {
     if (argc < 3) {
@@ -29,6 +23,12 @@ int main(int argc, char* argv[]) {
     std::string csv_file = argv[1];
     std::string lhs_str = argv[2];
     std::string rhs_str = argv[3];
+
+    std::string algo = "auto";
+    if (argc > 4) {
+        algo = argv[4]; 
+    }
+    
     MetricType metric_type = MetricType::MU_PLUS;
     bool verbose = false;
 
@@ -47,20 +47,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Compute metrics
-    long start_memory = get_memory_usage();
-    auto start = std::chrono::steady_clock::now();
+    FDMetricResult result = compute_single_fd_metric_opt(data, fd, metric_type, verbose, algo);
     
-    FDMetricResult result = compute_single_fd_metric_opt(data, fd, metric_type, verbose);
-    
-    auto end = std::chrono::steady_clock::now();
-    long end_memory = get_memory_usage();
-
-    std::chrono::duration<double> duration = end - start;
-    double memory_used = (start_memory - end_memory) / 1024.0;
-
-    // Print results
-    std::cout << result.metric_value << "," << duration.count() << "," << memory_used << std::endl;
-
     return 0;
 }
