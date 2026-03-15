@@ -1,59 +1,43 @@
 import copy
 import logging
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
 
 
-def assign_fds(settings: Dict[str, Any]) -> Dict[int, int]:
-    """## Create FD dictionary
-    If a functional dependency tables shall be created, we need to create a dictionary first. This dictionary will represent that true functional dependency assignment between the LHS and the RHS. For each value from the domain of the LHS, a value from the RHS domain will be drawn according to the RHS distribution.
-    """
+def generate_tuples(settings: Dict[str, Any]):
+    
+    num_rows = settings["tuples"]
+    lhs_sels = settings["lhs_sel"] # Guaranteed to be a list, even on 1-to-1 FDs.
+    
+    lhs_columns = []
+    for sel in lhs_sels:
+        card = int(num_rows * sel)
+        column = (settings["lhs_distribution"](size = num_rows) * card).astype(np.int32)
+        lhs_columns.append(column)
+        
+    rhs_card = int(num_rows * settings["rhs_sel"])
+    rhs_dist = (settings["rhs_distribution"](size = num_rows) * rhs_card).astype(np.int32)
+    rhs_index = 0 
 
-    # dictionary = {}
-    # for left in range(settings["lhs_cardinality"]):
-    #     dictionary[left] = int(
-    #         (settings["rhs_cardinality"]) * settings["rhs_distribution"]()
-    #     )
-
-    # return dictionary
+    rhs_data = []
+    fd_dict = {}
     
-    data = settings["rhs_distribution"](size = settings["lhs_cardinality"])
+    for r in range(num_rows):
+        row_key = tuple(column[r] for column in lhs_columns)
+        
+        if row_key not in fd_dict:
+            fd_dict[row_key] = rhs_dist[rhs_index]
+            rhs_index += 1 
+              
+        rhs_data.append(fd_dict[row_key])
     
-    return (data * settings["rhs_cardinality"]).astype(np.int32)
-
-
-def generate_tuples(settings: Dict[str, Any], fd_table: Optional[np.ndarray]):
-    """## Generate tuples
-    To generate a tuple, draw a value from the LHS domain according to the LHS distribution. If a FD dictionary is in use, choose the RHS value according to this dictionary. Otherwise, draw a random value from the RHS domain according to the RHS distribution.
-    """
-
-    # values = {0: [], 1: []}
-    # for _ in range(settings["tuples"]):
-    #     left = int((settings["lhs_cardinality"]) * settings["lhs_distribution"]())
-    #     values[0].append(left)
-    #     if fd_dictionary:
-    #         values[1].append(fd_dictionary[left])
-    #     else:
-    #         values[1].append(
-    #             int((settings["rhs_cardinality"]) * settings["rhs_distribution"]())
-    #         )
-    # return values
+    df_dict = {f"lhs_{i}": column for i, column in enumerate(lhs_columns)} # Molding it as a pandas dataframe.
+    df_dict["rhs"] = rhs_data
     
-    size = settings["tuples"]
-    
-    lhs = settings["lhs_distribution"](size = size)
-    lhs_values = (lhs * settings["lhs_cardinality"]).astype(np.int32)
-    
-    if fd_table is not None:
-        rhs_values = fd_table[lhs_values]    
-    else:
-        rhs = settings["rhs_distribution"](size = size)
-        rhs_values = (rhs * settings["rhs_cardinality"]).astype(np.int32)
-    
-    return {0: lhs_values, 1: rhs_values}
+    return pd.DataFrame(df_dict)
 
 
 # def get_noise_potential(
