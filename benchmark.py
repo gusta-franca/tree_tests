@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Tuple
 from adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
 from opt_metrics.mu_plus_opt import mu_plus_opt, cpp_mu_plus_opt
 # from opt_metrics.rfi_plus_opt import reliable_fraction_of_information_prime_plus_opt
+from synthetic_data.plot import plot_rank_frequency
 from synthetic_data.generator import generate_SYN 
 
 
@@ -19,14 +20,13 @@ def get_dataset_path(scenario: Dict[str, Any]) -> str:
 
 def get_generation_args(scenario: Dict[str, Any]) -> Dict[str, Any]:
     
-    n_rows = scenario["tuples"]
     dist = scenario["dist_params"]
     
     return {
         "fd": True,
         "tuples": scenario["tuples"],
-        "lhs_cardinality": int(n_rows * 0.6),
-        "rhs_cardinality": int(n_rows * 0.001),
+        "lhs_sels": scenario.get("lhs_sels"),
+        "rhs_sel": scenario.get("rhs_sel"),
         "lhs_dist_alpha": dist["lhs_dist_alpha"],
         "lhs_dist_beta": dist["lhs_dist_beta"],
         "rhs_dist_alpha": dist["rhs_dist_alpha"],
@@ -96,7 +96,7 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
         for metric_name, metric_func, metric_args in metrics_config:            
             is_cpp = metric_name.startswith("cpp")
         
-            print(f"Running tests for {scenario["name"]} scenario with {metric_name}")
+            print(f"Running: {scenario["name"]}, {metric_name}.\n")
             
             call_args = {"df": df}
             call_args.update(metric_args)
@@ -127,73 +127,85 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
     else:
         print("\nNo results")
         
-        return pd.DataFrame()
+    return pd.DataFrame()
     
 
 scenarios = [
     {
         "name": "zipf_100k", 
         "tuples": 100_000,
+        "lhs_sels": [0.5],
+        "rhs_sel": 0.5,
         "dist_params": {
             "dist_type": "zipf", 
-            "lhs_dist_alpha": 2, 
+            "lhs_dist_alpha": 1.01, 
             "lhs_dist_beta": 0, 
-            "rhs_dist_alpha": 2, 
+            "rhs_dist_alpha": 1.01, 
             "rhs_dist_beta": 0,
-            "noise": 0.3
+            "noise": 0.1
         }
     },
     {
         "name": "zipf_110k", 
-        "tuples": 110_000, 
+        "tuples": 110_000,
+        "lhs_sels": [0.5],
+        "rhs_sel": 0.5, 
         "dist_params": {
             "dist_type": "zipf", 
-            "lhs_dist_alpha": 2, 
+            "lhs_dist_alpha": 1.01, 
             "lhs_dist_beta": 0, 
-            "rhs_dist_alpha": 2, 
+            "rhs_dist_alpha": 1.01, 
             "rhs_dist_beta": 0,
-            "noise": 0.3
+            "noise": 0.1
         }
     },
     {
         "name": "zipf_120k", 
         "tuples": 120_000, 
+        "lhs_sels": [0.5],
+        "rhs_sel": 0.5, 
         "dist_params": {
             "dist_type": "zipf", 
             "lhs_dist_alpha": 1.01,
             "lhs_dist_beta": 0, 
             "rhs_dist_alpha": 1.01, 
             "rhs_dist_beta": 0,
-            "noise": 0.3
-        }
-    },
-    {
-        "name": "zipf_1m", 
-        "tuples": 1_000_000, 
-        "dist_params": {
-            "dist_type": "zipf", 
-            "lhs_dist_alpha": 2, 
-            "lhs_dist_beta": 0, 
-            "rhs_dist_alpha": 2, 
-            "rhs_dist_beta": 0,
-            "noise": 0.3
-        }
-    },
-    {
-        "name": "zipf_100m", 
-        "tuples": 100_000_000, 
-        "dist_params": {
-            "dist_type": "zipf", 
-            "lhs_dist_alpha": 2, 
-            "lhs_dist_beta": 0, 
-            "rhs_dist_alpha": 2, 
-            "rhs_dist_beta": 0,
-            "noise": 0.3
+            "noise": 0.1
         }
     },
     # {
+    #     "name": "zipf_1m", 
+    #     "tuples": 1_000_000, 
+    #     "lhs_sels": [0.5],
+    #     "rhs_sel": 0.5, 
+    #     "dist_params": {
+    #         "dist_type": "zipf", 
+    #         "lhs_dist_alpha": 1.01, 
+    #         "lhs_dist_beta": 0, 
+    #         "rhs_dist_alpha": 1.01, 
+    #         "rhs_dist_beta": 0,
+    #         "noise": 0.1
+    #     }
+    # },
+    # {
+    #     "name": "zipf_100m", 
+    #     "tuples": 100_000_000, 
+    #     "lhs_sels": [0.5],
+    #     "rhs_sel": 0.5, 
+    #     "dist_params": {
+    #         "dist_type": "zipf", 
+    #         "lhs_dist_alpha": 1.01, 
+    #         "lhs_dist_beta": 0, 
+    #         "rhs_dist_alpha": 1.01, 
+    #         "rhs_dist_beta": 0,
+    #         "noise": 0.1
+    #     }
+    # },
+    # {
     #     "name": "beta_1m", 
     #     "tuples": 1_000_000, 
+    #     "lhs_sels": [0.5],
+    #     "rhs_sel": 0.5, 
     #     "dist_params": {
     #         "dist_type": "beta",
     #         "lhs_dist_alpha": 2.0,

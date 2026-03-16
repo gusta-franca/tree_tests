@@ -1,13 +1,8 @@
 import pandas as pd
 import resource
 import subprocess
-from typing import List, Any
+from typing import Any, List
 
-
-def pdep_self_opt(df: pd.DataFrame, y: Any) -> float:
-    
-    return (df.groupby(y, sort = False).size() / df.shape[0]).pow(2).sum()
-    
     
 def pdep_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:
     
@@ -20,6 +15,11 @@ def pdep_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:
     counts = xy_counts.merge(x_counts, on=lhs)
 
     return (1 / df.shape[0]) * (counts["xy_count"].pow(2) / counts["x_count"]).sum()
+
+
+def pdep_self_opt(df: pd.DataFrame, y: Any) -> float:
+    
+    return (df.groupby(y, sort = False).size() / df.shape[0]).pow(2).sum()
 
 
 def mu_plus_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:

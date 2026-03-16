@@ -310,6 +310,33 @@ namespace {
         
         return sum / static_cast<double>(data.num_rows);
     }
+
+
+// void radix_sort_64(std::vector<uint64_t>& data) {
+//     size_t n = data.size();
+//     std::vector<uint64_t> temp(n);
+    
+//     for (int shift = 0; shift < 64; shift += 8) {
+//         uint32_t counts[256] = {0};
+        
+//         for (size_t i = 0; i < n; ++i) {
+//             counts[(data[i] >> shift) & 0xFF]++;
+//         }
+        
+//         uint32_t prefix[256] = {0};
+//         for (int i = 1; i < 256; ++i) {
+//             prefix[i] = prefix[i - 1] + counts[i - 1];
+//         }
+        
+//         for (size_t i = 0; i < n; ++i) {
+//             uint8_t byte_val = (data[i] >> shift) & 0xFF;
+//             temp[prefix[byte_val]++] = data[i];
+//         }
+        
+//         data.swap(temp);
+//     }
+// }
+
     
 } // anonymous namespace
 
