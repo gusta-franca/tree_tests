@@ -5,11 +5,11 @@ import time
 import tracemalloc
 from typing import Any, Callable, Dict, Tuple
 
-from adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
-from opt_metrics.mu_plus_opt import mu_plus_opt, cpp_mu_plus_opt
-# from opt_metrics.rfi_plus_opt import reliable_fraction_of_information_prime_plus_opt
-from synthetic_data.plot import plot_rank_frequency
-from synthetic_data.generator import generate_SYN 
+from src.metrics.python.adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
+from src.metrics.python.mu_plus_opt import mu_plus_opt, cpp_mu_plus_opt
+# from src.metrics.python.rfi_plus_opt import reliable_fraction_of_information_prime_plus_opt
+from src.benchmark.plot import plot_rank_frequency
+from src.synthetic_data.generator import generate_SYN 
 
 
 def get_dataset_path(scenario: Dict[str, Any]) -> str:

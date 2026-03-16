@@ -211,7 +211,7 @@ void CSVIndex::print_stats() const {
             for (const auto& [value, bitmap] : col.value_to_tuples) {
                 if (count++ >= 5) break;
                 std::cout << value << " (" << bitmap.cardinality() << " tuples)";
-                if (count < 5 && count < col.value_to_tuples.size()) std::cout << ", ";
+                if (count < 5 && static_cast<std::size_t>(count) < col.value_to_tuples.size()) std::cout << ", ";
             }
             std::cout << std::endl;
         }

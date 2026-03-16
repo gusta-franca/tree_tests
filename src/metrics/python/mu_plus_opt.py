@@ -47,7 +47,7 @@ def mu_plus_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> Dict[str, Any]:
 
 def cpp_mu_plus_opt(filepath: str, lhs: list[str], rhs: str, algo: str = "auto"):
     
-    binary_path = "./fd_metrics_opt_test" 
+    binary_path = "build/bin/fd_metrics_opt_test" 
     
     lhs_str = ",".join(lhs)
     

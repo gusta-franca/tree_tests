@@ -5,8 +5,8 @@ import os
 import ast
 import subprocess
 
-import adapted_paper_metrics
-from benchmark import run_benchmarks
+import src.metrics.python.adapted_paper_metrics as adapted_paper_metrics
+from src.benchmark.benchmark import run_benchmarks
 
 def parse_fds(fds_file):
     """Parse FDs from .fds file with format: (["col1","col2"],"target")"""
