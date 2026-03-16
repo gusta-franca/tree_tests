@@ -75,22 +75,24 @@ def potential_noisy_indices(df: pd.DataFrame, noisy_k: int) -> pd.DataFrame:
         p = probabilities
     )
     
-    return pd.DataFrame(lhs_values, columns = lhs_columns)
+    return pd.DataFrame(lhs_values.tolist(), columns = lhs_columns)
 
 
-def introduce_noise(
-    settings: Dict[str, Any], df: pd.DataFrame
-) -> pd.DataFrame:
+def introduce_noise(settings: Dict[str, Any], df: pd.DataFrame) -> pd.DataFrame:
     """
     Introduce noise to a dataset.
     To generate noise, identify all LHS values that occur at least twice. Get the frequency table of those values, take the half of it and sample a list of LHS values (which can occur multiple times) where noise will be introduced into. Identify tuples for each LHS value, and change their RHS value by picking randomly from all other possible RHS values (i.e. from all tuples where the LHS value is not equal to the one of the identified tuple).
     """
+    n_type = settings.get("n_type")
+    if n_type == "bogus":
+        return introduce_noise_bogus(settings, df)
+    elif n_type == "typo":
+        return introduce_noise_typo(settings, df)
+    
     return introduce_noise_copy(settings, df)
 
 
-def introduce_noise_copy(
-    settings: Dict[str, Any], df: pd.DataFrame
-) -> Dict[int, List[int]]:
+def introduce_noise_copy(settings: Dict[str, Any], df: pd.DataFrame) -> Dict[int, List[int]]:
     
     size = settings["tuples"]
     noisy_k = int(settings["noise"] * size)
@@ -98,14 +100,17 @@ def introduce_noise_copy(
     if noisy_k == 0:
         return df
     
-    tuples_count = potential_noisy_indices(df, noisy_k).count()
+    X_values_df = potential_noisy_indices(df, noisy_k)
     
+    lhs_tuples_list = [tuple(x) for x in X_values_df.to_numpy()]
+    tuples_count = pd.Series(lhs_tuples_list).value_counts()   
+     
     df_noisy = df.copy()
     indices_noisy = []
     lhs_columns = [column for column in df.columns if column != 'rhs']
 
-    for tuple, n in tuples_count.items():
-        mask = (df[lhs_columns] == tuple).all(axis = 1)
+    for tupl, n in tuples_count.items():
+        mask = (df[lhs_columns] == tupl).all(axis = 1)
         possible_indices = df[mask].index
         
         if len(possible_indices) >= n:
@@ -120,37 +125,38 @@ def introduce_noise_copy(
     return df_noisy
 
 
-def introduce_noise_bogus(
-    settings: Dict[str, Any], values: Dict[int, List[int]]
-) -> Dict[int, List[int]]:
+def introduce_noise_bogus(settings: Dict[str, Any], df: pd.DataFrame) -> pd.DataFrame:
     """Introduce noise into a clean dataset. Do it in a controlled fashion such that it the noise level set in the settings can be guranteed. The noise will be a completely new value each time, skewing the RHS frequencies heavily. After introducing noise, int(noise * tuples) new RHS values are in the dataset, each one with a frequency of 1."""
     noisy_k = int(settings["noise"] * settings["tuples"])
     if noisy_k == 0:
-        return values  # nothing to do
-    df = pd.DataFrame(values)
-    try:
-        X_values = potential_noisy_indices(df, noisy_k)
-    except ValueError:
-        logging.error(
-            f'It is not possible to introduce {settings["noise"]} noise to the dataset. Check the dataset with `get_noise_potential()` first.\n'
-        )
-        raise ValueError("Cannot create dataset, noise is set too high.")
-    dirty_values = copy.deepcopy(values)
-    bogus_value = df.iloc[:, 1].nunique()  # starting at nunique is just the best guess
-    for x, n in pd.Series(X_values).value_counts().items():
-        # get random indices of rows with the X value we want to change
-        indices_to_change = df.loc[df.iloc[:, 0] == x].sample(n=n).index
-        for i, x_index in enumerate(indices_to_change):
-            # make sure that our bogus value is not already in the Y values
-            while bogus_value in dirty_values[1]:
-                bogus_value += 1
-            dirty_values[1][x_index] = bogus_value
-    return dirty_values
+        return df  
+        
+    X_values = potential_noisy_indices(df, noisy_k)
+    
+    df_noisy = df.copy()
+    lhs_columns = [column for column in df.columns if column != 'rhs']
+    lhs_groups = df.groupby(lhs_columns).indices
+    lhs_list = [tuple(x) if len(lhs_columns) > 1 else x[0] for x in X_values.to_numpy()]
+    tuples_count = pd.Series(lhs_list).value_counts()
+    
+    indices_noisy = []
+        
+    for tupl, n in tuples_count.items():
+        possible_indices = lhs_groups.get(tupl, [])
+        
+        if len(possible_indices) >= n:
+            rows_noisy = np.random.choice(possible_indices, size = n, replace = False)
+            indices_noisy.extend(rows_noisy)
+
+    if indices_noisy:
+        start_bogus = df['rhs'].max() + 1
+        new_values = np.arange(start_bogus, start_bogus + len(indices_noisy))
+        df_noisy.loc[indices_noisy, "rhs"] = new_values
+            
+    return df_noisy
     
    
-def introduce_noise_typo(
-    settings: Dict[str, Any], values: Dict[int, List[Any]], typos_n: int = 3
-) -> Dict[int, List[int]]:
+def introduce_noise_typo(settings: Dict[str, Any], values: Dict[int, List[Any]], typos_n: int = 3) -> Dict[int, List[int]]:
     """Introduce noise into a clean dataset. Will introduce noise in a controlled fashion such that the noise level set in the settings will be guranteed. Noise is introduced by mapping each LHS values to a set of typos_n new RHS values. Those new RHS values represent typos in the data."""
     noisy_k = int(settings["noise"] * settings["tuples"])
     if noisy_k == 0:
@@ -187,19 +193,13 @@ def introduce_noise_typo(
 def create_zipf_lambda(a: float):
     def generate_bounded_zipf(size: int, n: int):
         samples = []
-        # Keep generating numbers until we have enough valid ones
         while len(samples) < size:
-            # Generate a raw batch
             batch = np.random.zipf(a, size=size)
-            # Filter out the massive numbers, keep only those <= n
             valid = batch[batch <= n]
-            # Subtract 1 so our domain starts at 0
             samples.extend(valid - 1)
         
-        # Take exactly the number of samples requested
-        result = np.array(samples[:size], dtype=np.float64)
+        result = np.array(samples[:size], dtype = np.float64)
         
-        # Scale to [0.0, 1.0) so it matches the behavior of the Beta distribution
         return result / n 
 
     return generate_bounded_zipf
@@ -236,7 +236,8 @@ def generate_SYN(
         "rhs_sel": rhs_sel,
         "lhs_distribution": lhs_func,
         "rhs_distribution": rhs_func,
-        "noise": noise
+        "noise": noise,
+        "n_type": n_type
     }
     
     df_clean = generate_tuples(settings = settings)
@@ -245,13 +246,8 @@ def generate_SYN(
         if get_noise_potential(df_clean) < settings["noise"]:
             raise ValueError(f"Could not generate noise for these settings.")
         
-        if n_type == "copy":
-            data = introduce_noise_copy(settings, df_clean)
-        elif n_type == "bogus":
-            data = introduce_noise_bogus(settings, df_clean)
-        elif n_type == "typo":
-            data = introduce_noise_typo(settings, df_clean)
-        
-        return data
+        df_noisy = introduce_noise(settings, df_clean)
+
+        return df_noisy
 
     return df_clean

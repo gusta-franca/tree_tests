@@ -1,7 +1,6 @@
 import pandas as pd
-import resource
 import subprocess
-from typing import Any, List
+from typing import Any, Dict, List
 
     
 def pdep_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:
@@ -22,7 +21,7 @@ def pdep_self_opt(df: pd.DataFrame, y: Any) -> float:
     return (df.groupby(y, sort = False).size() / df.shape[0]).pow(2).sum()
 
 
-def mu_plus_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:
+def mu_plus_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> Dict[str, Any]:
     
     pdepXY = pdep_opt(df, lhs, rhs)  # Usa a função pdep adaptada
     pdepY = pdep_self_opt(df, rhs)  # Usa a função pdep_self que não precisa ser adaptada
