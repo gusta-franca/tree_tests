@@ -6,7 +6,4 @@ data/
 papers/
 results/
 
-main copy.py
-main_old.py
-synthetic_data/plot.py
-*.o
+main_*.py

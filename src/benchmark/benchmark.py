@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import pandas as pd
 import subprocess
@@ -82,8 +83,15 @@ def run_metric(
 
 def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
 
+    results_dir = "results"
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"benchmark_{timestamp}.csv"
+    filepath = os.path.join(results_dir, filename)
+    
     results = []
-    output_path = "data/benchmark.csv"
     
     for scenario in scenarios:
         lhs_columns = [f"lhs_{i}" for i in range(len(scenario["lhs_sels"]))]
@@ -135,14 +143,14 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
             # },
         ]
         
-        filepath = get_dataset_path(scenario)
-        if regenerate or not os.path.exists(filepath):
+        datapath = get_dataset_path(scenario)
+        if regenerate or not os.path.exists(datapath):
             generate_dataset(scenario)
-            print(f"\nSaved {scenario["name"]} data on {filepath}\n")
+            print(f"\nSaved {scenario["name"]} data on {datapath}\n")
         
         load_start = time.time()
-        df = pd.read_csv(filepath)
-        plot_rank_frequency(df)
+        df = pd.read_csv(datapath)
+        # plot_rank_frequency(df)
         load_time = time.time() - load_start
         
         for config in metrics_config:            
@@ -153,7 +161,7 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
         
 
             if is_cpp:
-                call_args["filepath"] = filepath
+                call_args["filepath"] = datapath
             else:
                 call_args["df"] = df
                             
@@ -173,8 +181,8 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
         
     if results:
         df_results = pd.DataFrame(results)
-        df_results.to_csv(output_path, index = False)
-        print(f"\nResults saved in {output_path}")
+        df_results.to_csv(filepath, index = False)
+        print(f"\nResults saved in {filepath}")
         
         return df_results
 
