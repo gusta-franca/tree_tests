@@ -10,15 +10,21 @@ from src.metrics.python.adapted_paper_metrics import mu_plus, reliable_fraction_
 from src.metrics.python.mu_plus_opt import mu_plus_opt, cpp_mu_plus_opt
 # from src.metrics.python.rfi_plus_opt import reliable_fraction_of_information_prime_plus_opt
 from src.benchmark.plot import plot_rank_frequency
-from src.synthetic_data.generator import generate_SYN 
+from src.generator.generator import generate_SYN 
 
 
 def get_dataset_path(scenario: Dict[str, Any]) -> str:
+   
+    syn_data_dir = "data/synthetic"
+    
+    if not os.path.exists(syn_data_dir):
+        os.makedirs(syn_data_dir)
+        
     dist = scenario["dist_params"]
     n_type = dist.get("n_type", "copy")
     
     filename = (f"{scenario["name"]}_{n_type}.csv")
-    return os.path.join("data", filename)
+    return os.path.join(syn_data_dir, filename)
 
 
 def get_generation_args(scenario: Dict[str, Any]) -> Dict[str, Any]:
