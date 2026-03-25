@@ -4,7 +4,7 @@ import pandas as pd
 import subprocess
 import time
 import tracemalloc
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 from src.metrics.python.adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
 from src.metrics.python.mu_plus_opt import mu_plus_opt, cpp_mu_plus_opt
@@ -60,95 +60,73 @@ def load_dataset(filepath: str) -> pd.DataFrame:
     return pd.read_csv(filepath)
 
 
-def run_metric(
-    metric_func: Callable[..., float], 
-    call_args: Dict[str, Any],
-    is_cpp: bool = False
-) -> Tuple[float, float, float]:
+def save_results(results: List[Dict[str, Any]]):
     
-    if is_cpp:
-        return metric_func(**call_args)
- 
-    tracemalloc.start()
-    memory_before, _ = tracemalloc.get_traced_memory()
-
-    start_time = time.time()
-    
-    result = metric_func(**call_args)
-    
-    duration = time.time() - start_time
-    _, memory_peak = tracemalloc.get_traced_memory()
-    
-    memory_used = (memory_peak - memory_before) / (1024**2
-                                                   )
-    tracemalloc.stop()
-    
-    return result["result"], duration, memory_used
-
-
-
-def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
-
     results_dir = "results"
-    if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
+    os.makedirs(results_dir, exist_ok = True)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"benchmark_{timestamp}.csv"
     filepath = os.path.join(results_dir, filename)
     
+    df = pd.DataFrame(results)
+    df.to_csv(filepath, index = False)
+    print(f"\nResults saved in {filepath}")
+    
+
+def run_python_metric(metric_func, df, lhs, rhs):
+    
+    tracemalloc.start()
+    start_time = time.time()
+    
+    result = metric_func(df = df, lhs = lhs, rhs = rhs)
+    
+    compute_time = time.time() - start_time
+    _, memory_peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    
+    return {
+        "result_value": result["result"],
+        "build_time_s": 0.0,  # Pandas groups build the data scructure and compute at the same time
+        "compute_time_s": compute_time,
+        "memory_used_mb": memory_peak / (1024 * 1024)
+    }
+
+
+def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
+    
+    metrics_config = [
+        {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
+        {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
+        # {"name": "cpp_mu_plus_auto", "function": cpp_mu_plus_opt, "is_cpp": True},
+        # {
+        #     "name": "cpp_mu_plus_bitmap",
+        #     "function": cpp_mu_plus_opt,
+        #     "language": "cpp",
+        #     "lhs": lhs_columns, 
+        #     "rhs": "rhs",
+        #     "algo": "bitmap"
+        # },
+        # {
+        #     "name": "cpp_mu_plus_hash",
+        #     "function": cpp_mu_plus_opt,
+        #     "language": "cpp",
+        #     "lhs": lhs_columns, 
+        #     "rhs": "rhs",
+        #     "algo": "hash"
+        # },
+        # {
+        #     "name": "rfi_prime_plus",
+        #     "function": reliable_fraction_of_information_prime_plus,
+        #     "language": "python",
+        #     "lhs": lhs_columns, 
+        #     "rhs": "rhs",
+        # },
+    ]
+    
     results = []
     
-    for scenario in scenarios:
-        lhs_columns = [f"lhs_{i}" for i in range(len(scenario["lhs_sels"]))]
-        
-        metrics_config = [
-            {
-                "name": "py_mu_plus",
-                "function": mu_plus,
-                "language": "python",
-                "lhs": lhs_columns, 
-                "rhs": "rhs"
-            },
-            {
-                "name": "py_mu_plus_opt",
-                "function": mu_plus_opt,
-                "language": "python",
-                "lhs": lhs_columns, 
-                "rhs": "rhs"
-            },
-            {
-                "name": "cpp_mu_plus_auto",
-                "function": cpp_mu_plus_opt,
-                "language": "cpp",
-                "lhs": lhs_columns, 
-                "rhs": "rhs"
-            },
-            # {
-            #     "name": "cpp_mu_plus_bitmap",
-            #     "function": cpp_mu_plus_opt,
-            #     "language": "cpp",
-            #     "lhs": lhs_columns, 
-            #     "rhs": "rhs",
-            #     "algo": "bitmap"
-            # },
-            # {
-            #     "name": "cpp_mu_plus_hash",
-            #     "function": cpp_mu_plus_opt,
-            #     "language": "cpp",
-            #     "lhs": lhs_columns, 
-            #     "rhs": "rhs",
-            #     "algo": "hash"
-            # },
-            # {
-            #     "name": "rfi_prime_plus",
-            #     "function": reliable_fraction_of_information_prime_plus,
-            #     "language": "python",
-            #     "lhs": lhs_columns, 
-            #     "rhs": "rhs",
-            # },
-        ]
-        
+    for scenario in scenarios:        
         datapath = get_dataset_path(scenario)
         if regenerate or not os.path.exists(datapath):
             generate_dataset(scenario)
@@ -156,54 +134,50 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
         
         load_start = time.time()
         df = pd.read_csv(datapath)
-        # plot_rank_frequency(df)
         load_time = time.time() - load_start
+        # plot_rank_frequency(df)
+        
+        lhs_columns = [f"lhs_{i}" for i in range(len(scenario["lhs_sels"]))]
+        rhs_column = "rhs"
         
         for config in metrics_config:            
-            metric_name = config["name"]
-            metric_func = config["function"]
-            call_args = {k: v for k, v in config.items() if k not in ["name", "function", "language"]}
-            is_cpp = config.get("language") == "cpp"
-        
-
-            if is_cpp:
-                call_args["filepath"] = datapath
+            print(f"Running: {scenario["name"]}, {config["name"]}.\n")
+            
+            if config["is_cpp"]:
+                stats = config["function"](
+                    filepath = datapath, 
+                    lhs = lhs_columns, 
+                    rhs = rhs_column
+                )
             else:
-                call_args["df"] = df
-                            
-            print(f"Running: {scenario["name"]}, {metric_name}.\n")
-            
-            metric_value, execution_time, memory_used = run_metric(metric_func, call_args, is_cpp)
-            
+                stats = run_python_metric(
+                    metric_func = config["function"], 
+                    df = df, 
+                    lhs = lhs_columns, 
+                    rhs = rhs_column
+                )
+                                        
             results.append({
                 "scenario": scenario["name"],
-                "implementation": metric_name,
-                "result_value": round(metric_value, 5),
-                "load_time(s)": round(load_time, 5),
-                "execution_time(s)": round(execution_time, 5),
-                "total_time(s)": round(load_time + execution_time, 5),
-                "memory_used(MB)": round(memory_used, 5),
+                "implementation": config["name"],
+                "result_value": stats["result_value"],
+                "load_time_s": round(load_time, 5),
+                "build_time_s": round(stats.get("build_time_s", 0.0), 5),
+                "compute_time_s": round(stats["compute_time_s"], 5),
+                "memory_used_mb": round(stats["memory_used_mb"], 5),
             })
         
-    if results:
-        df_results = pd.DataFrame(results)
-        df_results.to_csv(filepath, index = False)
-        print(f"\nResults saved in {filepath}")
-        
-        return df_results
-
-    else:
-        print("\nNo results")
-        
-    return pd.DataFrame()
+    save_results(results)
     
+    return results
+
 
 scenarios = [
     {
         "name": "zipf_100k", 
-        "tuples": 100_000,
-        "lhs_sels": [0.001],
-        "rhs_sel": 0.5,
+        "tuples": 1000,
+        "lhs_sels": [0.01, 0.01, 0.01],
+        "rhs_sel": 0.01,
         "dist_params": {
             "dist_type": "zipf", 
             "lhs_dist_alpha": 1.01, 
@@ -214,21 +188,21 @@ scenarios = [
             "n_type": "copy",
         }
     },
-    {
-        "name": "zipf_100k", 
-        "tuples": 100_000,
-        "lhs_sels": [0.9],
-        "rhs_sel": 0.5, 
-        "dist_params": {
-            "dist_type": "zipf", 
-            "lhs_dist_alpha": 1.01, 
-            "lhs_dist_beta": 0, 
-            "rhs_dist_alpha": 1.01, 
-            "rhs_dist_beta": 0,
-            "noise": 0.0,
-            "n_type": "bogus",
-        }
-    },
+    # {
+    #     "name": "zipf_100k", 
+    #     "tuples": 100_000,
+    #     "lhs_sels": [0.1, 0.5, 0.01],
+    #     "rhs_sel": 0.5, 
+    #     "dist_params": {
+    #         "dist_type": "zipf", 
+    #         "lhs_dist_alpha": 1.01, 
+    #         "lhs_dist_beta": 0, 
+    #         "rhs_dist_alpha": 1.01, 
+    #         "rhs_dist_beta": 0,
+    #         "noise": 0.0,
+    #         "n_type": "bogus",
+    #     }
+    # },
     # {
     #     "name": "zipf_120k", 
     #     "tuples": 120_000, 
