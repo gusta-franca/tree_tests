@@ -12,33 +12,28 @@ def generate_tuples(settings: Dict[str, Any]):
     num_rows = settings["tuples"]
     lhs_sels = settings["lhs_sels"] # Guaranteed to be a list, even on 1-to-1 FDs.
     
-    lhs_columns = []
-    for sel in lhs_sels:
-        card = int(num_rows * sel)
-        column = (settings["lhs_distribution"](size = num_rows, n = card) * card).astype(np.int32)
-        lhs_columns.append(column)
-        
-    rhs_card = int(num_rows * settings["rhs_sel"])
-    rhs_dist = (settings["rhs_distribution"](size = num_rows, n = rhs_card) * rhs_card).astype(np.int32)
-    rhs_index = 0 
-
-    rhs_data = []
     fd_dict = {}
     
-    for r in range(num_rows):
-        row_key = tuple(column[r] for column in lhs_columns)
+    for i, sel in enumerate(lhs_sels):
+        card = max(1, int(num_rows * sel))
+        dist_values = settings["lhs_distribution"](size = num_rows, n = card)
+        fd_dict[f"lhs_{i}"] = (dist_values * card).astype(np.int32)
         
-        if row_key not in fd_dict:
-            fd_dict[row_key] = rhs_dist[rhs_index]
-            rhs_index += 1 
-              
-        rhs_data.append(fd_dict[row_key])
+    df = pd.DataFrame(fd_dict)
+    lhs_columns = list(df.columns)
     
-    df_dict = {f"lhs_{i}": column for i, column in enumerate(lhs_columns)} # Molding it as a pandas dataframe.
-    df_dict["rhs"] = rhs_data
+    unique_lhs = df.drop_duplicates(subset = lhs_columns).reset_index(drop = True)
+    num_unique_lhs = len(unique_lhs)
     
-    return pd.DataFrame(df_dict)
-
+    rhs_card = max(1, int(num_rows * settings["rhs_sel"]))
+    
+    rhs_dist = settings["rhs_distribution"](size = num_unique_lhs, n = rhs_card)
+    unique_lhs["rhs"] = (rhs_dist * rhs_card).astype(np.int32)
+    
+    final_df = df.merge(unique_lhs, on = lhs_columns, how = "left")
+    
+    return final_df
+    
 
 def get_noise_potential(df: pd.DataFrame) -> float:
     
