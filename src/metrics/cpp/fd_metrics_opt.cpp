@@ -179,6 +179,13 @@ namespace {
             }
         }
     };
+
+    struct PdepResult {
+        double value;
+        double build_time_s;
+        double compute_time_s;
+        double memory_used_mb;
+    };
     
     // Bitmap-based computation for low-cardinality cases
     double compute_pdep_bitmap(
@@ -254,12 +261,17 @@ namespace {
     }
     
     // Hash-based computation (similar to original but optimized)
-    double compute_pdep_hash(
+    PdepResult compute_pdep_hash(
         const ColumnarData& data,
         const std::vector<size_t>& lhs_indices,
         size_t rhs_idx,
         size_t& dom_x_size,
         double& lhs_uniqueness) {
+
+        PdepResult res;
+        
+        // Build hashtable
+        auto build_start = std::chrono::steady_clock::now();
         
         using XMap = ankerl::unordered_dense::map<std::vector<uint32_t>, uint64_t, CompactKeyHash>;
         using XYMap = ankerl::unordered_dense::map<std::vector<uint32_t>, uint64_t, CompactKeyHash>;
@@ -290,13 +302,29 @@ namespace {
             x_counts[x_key]++;
             xy_counts[xy_key]++;
         }
+
+        auto build_end = std::chrono::steady_clock::now();
+        res.build_time_s = std::chrono::duration<double>(build_end - build_start).count();
+
+        // Get hashtable size
+        size_t x_bytes = x_counts.size() * sizeof(XMap::value_type);
+        size_t xy_bytes = xy_counts.size() * sizeof(XYMap::value_type);        
+        size_t control_bytes = x_counts.bucket_count() + xy_counts.bucket_count(); // https://github.com/martinus/unordered_dense?tab=readme-ov-file#5-design
+        
+        double memory_mb = (x_bytes + xy_bytes + control_bytes) / (1024.0 * 1024.0);
+        res.memory_used_mb = memory_mb;
+
+        // Computing metric
+        auto compute_start = std::chrono::steady_clock::now();
         
         dom_x_size = x_counts.size();
         lhs_uniqueness = static_cast<double>(dom_x_size) / static_cast<double>(data.num_rows);
         
         // Early termination: perfect FD detection
         if (xy_counts.size() == x_counts.size()) {
-            return 1.0;  // pdep_xy = 1.0 means perfect dependency
+            res.value = 1.0;  // pdep_xy = 1.0 means perfect dependency;
+            res.compute_time_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - compute_start).count();
+            return res;
         }
         
         // Compute pdep
@@ -307,44 +335,15 @@ namespace {
             double term = static_cast<double>(xy_count * xy_count) / static_cast<double>(x_count);
             sum += term;
         }
+
+        auto compute_end = std::chrono::steady_clock::now();
         
-        return sum / static_cast<double>(data.num_rows);
+        res.value = sum / static_cast<double>(data.num_rows);
+        res.compute_time_s = std::chrono::duration<double>(compute_end - compute_start).count();
+        return res;
     }
-
-
-// void radix_sort_64(std::vector<uint64_t>& data) {
-//     size_t n = data.size();
-//     std::vector<uint64_t> temp(n);
-    
-//     for (int shift = 0; shift < 64; shift += 8) {
-//         uint32_t counts[256] = {0};
-        
-//         for (size_t i = 0; i < n; ++i) {
-//             counts[(data[i] >> shift) & 0xFF]++;
-//         }
-        
-//         uint32_t prefix[256] = {0};
-//         for (int i = 1; i < 256; ++i) {
-//             prefix[i] = prefix[i - 1] + counts[i - 1];
-//         }
-        
-//         for (size_t i = 0; i < n; ++i) {
-//             uint8_t byte_val = (data[i] >> shift) & 0xFF;
-//             temp[prefix[byte_val]++] = data[i];
-//         }
-        
-//         data.swap(temp);
-//     }
-// }
-
-    
 } // anonymous namespace
 
-long get_memory_usage() {
-    struct rusage usage;
-    getrusage(RUSAGE_SELF, &usage);
-    return usage.ru_maxrss;
-}
 
 // Main computation function with strategy selection
 FDMetricResult compute_single_fd_metric_opt(
@@ -364,9 +363,6 @@ FDMetricResult compute_single_fd_metric_opt(
         std::cout << "\n  Computing " << metric_type_to_string(metric_type) << " for FD: ";
         fd.print();
     }
-
-    long start_memory = get_memory_usage();
-    auto start_time = std::chrono::steady_clock::now();
     
     // Get column indices
     std::vector<size_t> lhs_indices;
@@ -405,6 +401,8 @@ FDMetricResult compute_single_fd_metric_opt(
     // Compute pdep(X,Y)
     auto t1 = std::chrono::steady_clock::now();
 
+    PdepResult pdep_res;
+
     if (algo == "bitmap") 
         use_bitmap = true;
     else if (algo == "hash") 
@@ -416,9 +414,11 @@ FDMetricResult compute_single_fd_metric_opt(
         result.pdep_xy = compute_pdep_bitmap(data, lhs_indices, rhs_idx, 
                                              result.dom_x_size, result.lhs_uniqueness);
     } else {
-        result.pdep_xy = compute_pdep_hash(data, lhs_indices, rhs_idx,
+        pdep_res = compute_pdep_hash(data, lhs_indices, rhs_idx,
                                            result.dom_x_size, result.lhs_uniqueness);
     }
+
+    result.pdep_xy = pdep_res.value;
 
     auto t2 = std::chrono::steady_clock::now();
     
@@ -446,24 +446,22 @@ FDMetricResult compute_single_fd_metric_opt(
         }
     }
 
-    auto end_time = std::chrono::steady_clock::now();
-    long end_memory = get_memory_usage();
-
-    std::chrono::duration<double> duration = end_time - start_time;
-    double memory_used = (end_memory - start_memory) / 1024.0;
-
-    // Print results
-    std::cout << result.metric_value << "," << duration.count() << "," << memory_used << std::endl;
-    
+    // Print results    
     if (verbose) {
         auto pdep_xy_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
         auto pdep_y_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();
         std::cout << "  pdep(X,Y): " << pdep_xy_ms << "ms, pdep(Y): " << pdep_y_ms << "ms" << std::endl;
         std::cout << "  Result: " << result.metric_value << std::endl;
     }
+
+    std::cout << result.metric_value << "," 
+              << pdep_res.build_time_s << "," 
+              << pdep_res.compute_time_s << "," 
+              << pdep_res.memory_used_mb << std::endl;
     
     return result;
 }
+
 
 std::vector<FDMetricResult> compute_fd_metrics_opt(
     const ColumnarData& data,
