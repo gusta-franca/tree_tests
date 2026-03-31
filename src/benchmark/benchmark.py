@@ -17,13 +17,13 @@ def get_dataset_path(scenario: Dict[str, Any]) -> str:
    
     syn_data_dir = "data/synthetic"
     
-    if not os.path.exists(syn_data_dir):
-        os.makedirs(syn_data_dir)
-        
+    os.makedirs(syn_data_dir, exist_ok = True)
+              
     dist = scenario["dist_params"]
-    n_type = dist.get("n_type", "copy")
-    
-    filename = (f"{scenario["name"]}_{n_type}.csv")
+    n_type = dist["n_type"]
+    noise = dist["noise"]
+        
+    filename = (f"{scenario["name"]}_{n_type}_{noise}.csv")
     return os.path.join(syn_data_dir, filename)
 
 
@@ -58,7 +58,7 @@ def generate_dataset(scenario: Dict[str, Any]) -> None:
 def load_dataset(filepath: str) -> pd.DataFrame:
 
     return pd.read_csv(filepath)
-
+    
 
 def save_results(results: List[Dict[str, Any]]):
     
@@ -87,7 +87,7 @@ def run_python_metric(metric_func, df, lhs, rhs):
     
     return {
         "result_value": result["result"],
-        "build_time_s": 0.0,  # Pandas groups build the data scructure and compute at the same time
+        "build_time_s": 0.0,  # Pandas builds and computes at the same time 
         "compute_time_s": compute_time,
         "memory_used_mb": memory_peak / (1024 * 1024)
     }
@@ -98,7 +98,8 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
     metrics_config = [
         {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
         {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
-        # {"name": "cpp_mu_plus_auto", "function": cpp_mu_plus_opt, "is_cpp": True},
+        {"name": "cpp_mu_plus_auto", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_opt_test"},
+        {"name": "cpp_mu_plus_partitioned", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_partitioned_test"},
         # {
         #     "name": "cpp_mu_plus_bitmap",
         #     "function": cpp_mu_plus_opt,
@@ -147,7 +148,8 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
                 stats = config["function"](
                     filepath = datapath, 
                     lhs = lhs_columns, 
-                    rhs = rhs_column
+                    rhs = rhs_column,
+                    binary_name = config["binary_name"]
                 )
             else:
                 stats = run_python_metric(
@@ -156,15 +158,22 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
                     lhs = lhs_columns, 
                     rhs = rhs_column
                 )
+                
+            result_value = round(stats["result_value"], 5)
+            build_time = round(stats.get("build_time_s", 0.0), 5)
+            compute_time = round(stats["compute_time_s"], 5)
+            total_time = round(load_time + build_time + compute_time, 5)
+            memory_used = round(stats["memory_used_mb"], 5)
                                         
             results.append({
                 "scenario": scenario["name"],
                 "implementation": config["name"],
-                "result_value": stats["result_value"],
+                "result_value": result_value,
                 "load_time_s": round(load_time, 5),
-                "build_time_s": round(stats.get("build_time_s", 0.0), 5),
-                "compute_time_s": round(stats["compute_time_s"], 5),
-                "memory_used_mb": round(stats["memory_used_mb"], 5),
+                "build_time_s": build_time,
+                "compute_time_s": compute_time,
+                "total_time_s": total_time,
+                "memory_used_mb": memory_used,
             })
         
     save_results(results)
@@ -175,7 +184,7 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
 scenarios = [
     {
         "name": "zipf_100k", 
-        "tuples": 1000,
+        "tuples": 100000,
         "lhs_sels": [0.01, 0.01, 0.01],
         "rhs_sel": 0.01,
         "dist_params": {
@@ -184,7 +193,7 @@ scenarios = [
             "lhs_dist_beta": 0, 
             "rhs_dist_alpha": 1.01, 
             "rhs_dist_beta": 0,
-            "noise": 0.0,
+            "noise": 0.01,
             "n_type": "copy",
         }
     },

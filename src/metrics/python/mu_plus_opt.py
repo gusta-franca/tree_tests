@@ -11,7 +11,7 @@ def pdep_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:
     
     x_counts = xy_counts.groupby(lhs, sort = False)["xy_count"].sum().reset_index(name = "x_count")
     
-    counts = xy_counts.merge(x_counts, on=lhs)
+    counts = xy_counts.merge(x_counts, on = lhs)
 
     return (1 / df.shape[0]) * (counts["xy_count"].pow(2) / counts["x_count"]).sum()
 
@@ -45,9 +45,9 @@ def mu_plus_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> Dict[str, Any]:
     }
     
 
-def cpp_mu_plus_opt(filepath: str, lhs: list[str], rhs: str, algo: str = "auto"):
+def cpp_mu_plus_opt(filepath: str, lhs: list[str], rhs: str,  binary_name: str, algo: str = "auto"):
     
-    binary_path = "build/bin/fd_metrics_opt_test" 
+    binary_path = f"build/bin/{binary_name}" 
     
     lhs_str = ",".join(lhs)
     
@@ -55,10 +55,12 @@ def cpp_mu_plus_opt(filepath: str, lhs: list[str], rhs: str, algo: str = "auto")
     
     result = subprocess.run(cmd, capture_output = True, text = True)
 
-    output = result.stdout.strip().split(',')
+    output = result.stdout.strip().split('\n')[-1] # Get last printed line
+    parts = output.split(',')
     
-    metric_value = float(output[0])
-    execution_time = float(output[1])
-    memory_used = float(output[2])
-    
-    return metric_value, execution_time, memory_used
+    return {
+        "result_value": float(parts[0]),
+        "build_time_s": float(parts[1]),
+        "compute_time_s": float(parts[2]),
+        "memory_used_mb": float(parts[3])
+    }

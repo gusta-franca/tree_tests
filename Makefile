@@ -51,7 +51,13 @@ _FD_METRICS_OPT_TEST_OBJS = $(FD_METRICS_OPT_TEST_SRCS:.cpp=.o)
 _FD_METRICS_OPT_TEST_OBJS := $(_FD_METRICS_OPT_TEST_OBJS:.c=.o)
 FD_METRICS_OPT_TEST_OBJS = $(addprefix build/obj/, $(_FD_METRICS_OPT_TEST_OBJS))
 
-.PHONY: all clean run setup directories fd_input fd_checker_test fd_metrics_test fd_metrics_opt_test 
+FD_METRICS_PARTITIONED_TEST_TARGET = build/bin/fd_metrics_partitioned_test
+FD_METRICS_PARTITIONED_TEST_SRCS = fd_metrics_partitioned_test.cpp fd_metrics_partitioned.cpp fd_input.cpp csv_index.cpp roaring.c
+_FD_METRICS_PARTITIONED_TEST_OBJS = $(FD_METRICS_PARTITIONED_TEST_SRCS:.cpp=.o)
+_FD_METRICS_PARTITIONED_TEST_OBJS := $(_FD_METRICS_PARTITIONED_TEST_OBJS:.c=.o)
+FD_METRICS_PARTITIONED_TEST_OBJS = $(addprefix build/obj/, $(_FD_METRICS_PARTITIONED_TEST_OBJS))
+
+.PHONY: all clean run setup directories fd_input fd_checker_test fd_metrics_test fd_metrics_opt_test fd_metrics_partitioned_test
 
 directories:
 	@mkdir -p build/obj
@@ -71,6 +77,8 @@ fd_checker_test: setup $(FD_CHECKER_TEST_TARGET)
 fd_metrics_test: setup $(FD_METRICS_TEST_TARGET)
 
 fd_metrics_opt_test: setup $(FD_METRICS_OPT_TEST_TARGET)
+
+fd_metrics_partitioned_test: setup $(FD_METRICS_PARTITIONED_TEST_TARGET)
 
 # $(TARGET): $(OBJS)
 # 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -94,6 +102,9 @@ $(FD_METRICS_TEST_TARGET): $(FD_METRICS_TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(FD_METRICS_OPT_TEST_TARGET): $(FD_METRICS_OPT_TEST_OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+$(FD_METRICS_PARTITIONED_TEST_TARGET): $(FD_METRICS_PARTITIONED_TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 build/obj/%.o: src/metrics/cpp/%.cpp | directories
