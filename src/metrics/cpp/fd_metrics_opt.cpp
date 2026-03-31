@@ -276,6 +276,7 @@ namespace {
         using XMap = ankerl::unordered_dense::map<std::vector<uint32_t>, uint64_t, CompactKeyHash>;
         using XYMap = ankerl::unordered_dense::map<std::vector<uint32_t>, uint64_t, CompactKeyHash>;
         
+        // Two big hashtables; may take a lot of memory
         XMap x_counts;
         XYMap xy_counts;
         
@@ -309,7 +310,7 @@ namespace {
         // Get hashtable size
         size_t x_bytes = x_counts.size() * sizeof(XMap::value_type);
         size_t xy_bytes = xy_counts.size() * sizeof(XYMap::value_type);        
-        size_t control_bytes = x_counts.bucket_count() + xy_counts.bucket_count(); // https://github.com/martinus/unordered_dense?tab=readme-ov-file#5-design
+        size_t control_bytes = (x_counts.bucket_count() + xy_counts.bucket_count()) * 8; // https://github.com/martinus/unordered_dense?tab=readme-ov-file#5-design
         
         double memory_mb = (x_bytes + xy_bytes + control_bytes) / (1024.0 * 1024.0);
         res.memory_used_mb = memory_mb;
