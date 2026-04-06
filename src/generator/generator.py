@@ -7,32 +7,46 @@ import numpy as np
 import pandas as pd
 
 
-def generate_tuples(settings: Dict[str, Any]):
+# REMINDER: the scenarios in benchmark.py will now host 
+# "tuple_sel" and "lhs_number" instead of "lhs_sels"
+def generate_tuples(settings: Dict[str, Any]) -> pd.DataFrame:
     
-    num_rows = settings["tuples"]
-    lhs_sels = settings["lhs_sels"] # Guaranteed to be a list, even on 1-to-1 FDs.
+    num_rows = settings["tuples"]    
+    tuple_sel = settings["tuple_sel"]
+    tuple_card = max(1, int(num_rows * tuple_sel))
     
-    fd_dict = {}
+    lhs_values = (settings["lhs_distribution"](size = num_rows, n = tuple_card))
+    tuple_ids = (lhs_values * tuple_card).astype(np.int32)
     
-    for i, sel in enumerate(lhs_sels):
-        card = max(1, int(num_rows * sel))
-        dist_values = settings["lhs_distribution"](size = num_rows, n = card)
-        fd_dict[f"lhs_{i}"] = (dist_values * card).astype(np.int32)
-        
-    df = pd.DataFrame(fd_dict)
-    lhs_columns = list(df.columns)
+    df = pd.DataFrame({"tuple_id": tuple_ids})
     
-    unique_lhs = df.drop_duplicates(subset = lhs_columns).reset_index(drop = True)
+    unique_lhs = df.drop_duplicates(subset = ["tuple_id"]).reset_index(drop = True)
     num_unique_lhs = len(unique_lhs)
     
     rhs_card = max(1, int(num_rows * settings["rhs_sel"]))
-    
     rhs_dist = settings["rhs_distribution"](size = num_unique_lhs, n = rhs_card)
     unique_lhs["rhs"] = (rhs_dist * rhs_card).astype(np.int32)
     
-    final_df = df.merge(unique_lhs, on = lhs_columns, how = "left")
+    df = df.merge(unique_lhs, on = "tuple_id", how = "left")
     
-    return final_df
+
+    lhs_number = settings["lhs_number"]
+    
+    # Splits the tuple id into multiple columns if there is more than 1 LHS attribute
+    if lhs_number > 1:
+        base = int(np.ceil(num_unique_lhs ** (1.0 / lhs_number)))
+        for i in range(lhs_number):
+            df[f"lhs_{i}"] = (df["tuple_id"] // (base ** i)) % base
+            
+        df = df.drop(columns = ["tuple_id"])
+    else:
+        df = df.rename(columns = {"tuple_id": "lhs_0"})
+    
+    # Reorder columns so RHS is always at the very end
+    lhs_cols = [col for col in df.columns if col != "rhs"]
+    df = df[lhs_cols + ["rhs"]]
+    
+    return df
     
 
 def get_noise_potential(df: pd.DataFrame) -> float:
@@ -206,7 +220,8 @@ def create_beta_lambda(a, b):
 def generate_SYN(
     fd: bool,
     tuples: int,
-    lhs_sels: List[float],
+    tuple_sel: float,
+    lhs_number: int,
     rhs_sel: float,
     lhs_dist_alpha: float,
     lhs_dist_beta: float,
@@ -227,7 +242,8 @@ def generate_SYN(
         
     settings = {
         "tuples": tuples,
-        "lhs_sels": lhs_sels,
+        "tuple_sel": tuple_sel,
+        "lhs_number": lhs_number,
         "rhs_sel": rhs_sel,
         "lhs_distribution": lhs_func,
         "rhs_distribution": rhs_func,

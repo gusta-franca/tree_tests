@@ -34,7 +34,8 @@ def get_generation_args(scenario: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "fd": True,
         "tuples": scenario["tuples"],
-        "lhs_sels": scenario.get("lhs_sels"),
+        "tuple_sel": scenario["tuple_sel"],
+        "lhs_number": scenario["lhs_number"], 
         "rhs_sel": scenario.get("rhs_sel"),
         "lhs_dist_alpha": dist["lhs_dist_alpha"],
         "lhs_dist_beta": dist["lhs_dist_beta"],
@@ -138,7 +139,7 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
         load_time = time.time() - load_start
         # plot_rank_frequency(df)
         
-        lhs_columns = [f"lhs_{i}" for i in range(len(scenario["lhs_sels"]))]
+        lhs_columns = [f"lhs_{i}" for i in range(scenario["lhs_number"])]
         rhs_column = "rhs"
         
         for config in metrics_config:            
@@ -185,7 +186,8 @@ scenarios = [
     {
         "name": "zipf_100k", 
         "tuples": 100000,
-        "lhs_sels": [0.01, 0.01, 0.01],
+        "tuple_sel": 0.01,
+        "lhs_number": 3,
         "rhs_sel": 0.01,
         "dist_params": {
             "dist_type": "zipf", 
@@ -198,8 +200,8 @@ scenarios = [
         }
     },
     # {
-    #     "name": "zipf_100k", 
-    #     "tuples": 100_000,
+    #     "name": "zipf_1m", 
+    #     "tuples": 1_000_000,
     #     "lhs_sels": [0.1, 0.5, 0.01],
     #     "rhs_sel": 0.5, 
     #     "dist_params": {
@@ -208,8 +210,8 @@ scenarios = [
     #         "lhs_dist_beta": 0, 
     #         "rhs_dist_alpha": 1.01, 
     #         "rhs_dist_beta": 0,
-    #         "noise": 0.0,
-    #         "n_type": "bogus",
+    #         "noise": 0.01,
+    #         "n_type": "copy",
     #     }
     # },
     # {
