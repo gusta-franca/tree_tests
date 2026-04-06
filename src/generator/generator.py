@@ -7,8 +7,6 @@ import numpy as np
 import pandas as pd
 
 
-# REMINDER: the scenarios in benchmark.py will now host 
-# "tuple_sel" and "lhs_number" instead of "lhs_sels"
 def generate_tuples(settings: Dict[str, Any]) -> pd.DataFrame:
     
     num_rows = settings["tuples"]    

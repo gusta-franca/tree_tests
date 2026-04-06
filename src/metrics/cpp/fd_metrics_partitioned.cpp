@@ -110,7 +110,8 @@ PdepResult compute_pdep(const CSVIndex& index, const FDSpec& fd) {
         x_counts.reserve(bm.cardinality());
         xy_counts.reserve(bm.cardinality());
 
-        for (uint32_t tid : bm) {
+        // Couting LHS occurences (domain of X) and tuple occurances (domain of XY, the combination of LHS and RHS) 
+        for (uint64_t tid : bm) {
             x_key.clear();
             
             for (size_t col_idx : lhs_indices) {
@@ -118,7 +119,7 @@ PdepResult compute_pdep(const CSVIndex& index, const FDSpec& fd) {
             }
             
             xy_key = x_key; 
-            uint32_t rhs_val = values[rhs_index][tid];
+            uint64_t rhs_val = values[rhs_index][tid];
             xy_key.push_back(rhs_val);
 
             x_counts[x_key]++;
@@ -144,10 +145,9 @@ PdepResult compute_pdep(const CSVIndex& index, const FDSpec& fd) {
         // Compute xy_count^2 / x_count for this iteration and sum to global_sum
         for (const auto& [xy_k, xy_c] : xy_counts) {
             std::vector<uint32_t> x_k(xy_k.begin(), xy_k.end() - 1);
+            uint64_t x_c = x_counts[x_k];
 
-            uint32_t x_c = x_counts[x_k];
-
-            double term = (xy_c*xy_c) / static_cast<double>(x_c);
+            double term = (static_cast<double>(xy_c) * xy_c) / x_c;
             global_sum += term;
         }
 
@@ -166,7 +166,7 @@ PdepResult compute_pdep(const CSVIndex& index, const FDSpec& fd) {
         pdep_Y += (count * count);
     }
 
-    pdep_Y /= static_cast<double>(total_rows * total_rows);
+    pdep_Y /= static_cast<double>(total_rows) * total_rows;
 
     // If it's a key
     if (total_rows == dom_x_size) {

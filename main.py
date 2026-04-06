@@ -1,9 +1,4 @@
 import sys
-import time
-import pandas as pd
-import os
-import ast
-import subprocess
 
 from src.benchmark.benchmark import prepare_datasets, run_benchmarks
 
@@ -19,7 +14,7 @@ def main():
 scenarios = [
     {
         "name": "zipf_100k", 
-        "tuples": 100000,
+        "tuples": 100_000,
         "tuple_sel": 0.1,
         "lhs_number": 3,
         "rhs_sel": 0.01,
