@@ -217,44 +217,23 @@ def create_zipf_lambda(a: float):
 def create_beta_lambda(a, b):
     return lambda size, n: np.random.beta(a, b, size = size)
 
-def generate_SYN(
-    fd: bool,
-    tuples: int,
-    tuple_sel: float,
-    lhs_number: int,
-    rhs_sel: float,
-    lhs_dist_alpha: float,
-    lhs_dist_beta: float,
-    rhs_dist_alpha: float,
-    rhs_dist_beta: float,
-    noise: float = 0.01,
-    n_type: str = "copy",
-    dist_type: str = "beta"     
-) -> pd.DataFrame:
+# TODO: verify settings.fd and remove it if safe
+def generate_SYN(settings: Dict[str, Any]) -> pd.DataFrame:
     """The main method to genreate a SYN dataset. Summarizes almost all methods above."""
     
-    if dist_type == "zipf":
-        lhs_func = create_zipf_lambda(lhs_dist_alpha)
-        rhs_func = create_zipf_lambda(rhs_dist_alpha)
+    if settings["dist_type"] == "zipf":
+        settings["lhs_distribution"] = create_zipf_lambda(settings["lhs_dist_alpha"])
+        settings["rhs_distribution"] = create_zipf_lambda(settings["rhs_dist_alpha"])
     else:
-        lhs_func = create_beta_lambda(lhs_dist_alpha, lhs_dist_beta)
-        rhs_func = create_beta_lambda(rhs_dist_alpha, rhs_dist_beta)
-        
-    settings = {
-        "tuples": tuples,
-        "tuple_sel": tuple_sel,
-        "lhs_number": lhs_number,
-        "rhs_sel": rhs_sel,
-        "lhs_distribution": lhs_func,
-        "rhs_distribution": rhs_func,
-        "noise": noise,
-        "n_type": n_type
-    }
+        settings["lhs_distribution"] = create_beta_lambda(settings["lhs_dist_alpha"], settings["lhs_dist_beta"])
+        settings["rhs_distribution"] = create_beta_lambda(settings["rhs_dist_alpha"], settings["rhs_dist_beta"])
     
     df_clean = generate_tuples(settings = settings)
     
-    if fd and noise > 0:
-        if get_noise_potential(df_clean) < settings["noise"]:
+    noise = settings["noise"]
+    
+    if noise > 0:
+        if get_noise_potential(df_clean) < noise:
             raise ValueError(f"Could not generate noise for these settings.")
         
         df_noisy = introduce_noise(settings, df_clean)

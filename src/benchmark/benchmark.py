@@ -32,7 +32,6 @@ def get_generation_args(scenario: Dict[str, Any]) -> Dict[str, Any]:
     dist = scenario["dist_params"]
     
     return {
-        "fd": True,
         "tuples": scenario["tuples"],
         "tuple_sel": scenario["tuple_sel"],
         "lhs_number": scenario["lhs_number"], 
@@ -45,6 +44,52 @@ def get_generation_args(scenario: Dict[str, Any]) -> Dict[str, Any]:
         "dist_type": dist["dist_type"],
         "n_type": dist["n_type"],
     }
+
+
+def log_metadata(dataset_path: str, scenario: Dict[str, any]):
+    
+    metadata_file = "data/synthetic/metadata.csv"
+    dist_params = scenario["dist_params"]
+    
+    entry = {
+        "file_path": dataset_path,
+        "scenario_name": scenario["name"],
+        "tuples": scenario["tuples"],
+        "tuple_sel": scenario["tuple_sel"],
+        "lhs_number": scenario["lhs_number"],
+        "rhs_sel": scenario["rhs_sel"],
+        "dist_type": dist_params["dist_type"],
+        "n_type": dist_params["n_type"],
+        "noise": dist_params["noise"],
+    }
+    
+    if os.path.exists(metadata_file):
+        df_meta = pd.read_csv(metadata_file)
+        
+        # Replace current metadata.csv with the new metadata
+        if dataset_path in df_meta["file_path"].values:
+            df_meta = df_meta[df_meta["file_path"] != dataset_path]
+            
+        df_meta = pd.concat([df_meta, pd.DataFrame([entry])], ignore_index = True);
+    else:
+        df_meta = pd.DataFrame([entry])
+        
+    df_meta.to_csv(metadata_file, index = False)
+    
+
+def prepare_datasets(scenarios: List[Dict[str, Any]], regenerate: bool = False):
+    
+    for scenario in scenarios:
+        dataset_path = get_dataset_path(scenario)
+        
+        if not os.path.exists(dataset_path) or regenerate:
+            gen_args = get_generation_args(scenario)
+            df = generate_SYN(gen_args)
+            
+            df.to_csv(dataset_path, index = False)
+            print(f"Save dataset to {dataset_path}")
+            
+        log_metadata(dataset_path, scenario)
 
 
 def generate_dataset(scenario: Dict[str, Any]) -> None:
@@ -94,7 +139,7 @@ def run_python_metric(metric_func, df, lhs, rhs):
     }
 
 
-def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
+def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
     
     metrics_config = [
         {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
@@ -130,10 +175,7 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
     
     for scenario in scenarios:        
         datapath = get_dataset_path(scenario)
-        if regenerate or not os.path.exists(datapath):
-            generate_dataset(scenario)
-            print(f"\nSaved {scenario["name"]} data on {datapath}\n")
-        
+
         load_start = time.time()
         df = pd.read_csv(datapath)
         load_time = time.time() - load_start
@@ -180,98 +222,3 @@ def run_benchmarks(regenerate: bool = False) -> pd.DataFrame:
     save_results(results)
     
     return results
-
-
-scenarios = [
-    {
-        "name": "zipf_100k", 
-        "tuples": 100000,
-        "tuple_sel": 0.01,
-        "lhs_number": 3,
-        "rhs_sel": 0.01,
-        "dist_params": {
-            "dist_type": "zipf", 
-            "lhs_dist_alpha": 1.01, 
-            "lhs_dist_beta": 0, 
-            "rhs_dist_alpha": 1.01, 
-            "rhs_dist_beta": 0,
-            "noise": 0.01,
-            "n_type": "copy",
-        }
-    },
-    # {
-    #     "name": "zipf_1m", 
-    #     "tuples": 1_000_000,
-    #     "lhs_sels": [0.1, 0.5, 0.01],
-    #     "rhs_sel": 0.5, 
-    #     "dist_params": {
-    #         "dist_type": "zipf", 
-    #         "lhs_dist_alpha": 1.01, 
-    #         "lhs_dist_beta": 0, 
-    #         "rhs_dist_alpha": 1.01, 
-    #         "rhs_dist_beta": 0,
-    #         "noise": 0.01,
-    #         "n_type": "copy",
-    #     }
-    # },
-    # {
-    #     "name": "zipf_120k", 
-    #     "tuples": 120_000, 
-    #     "lhs_sels": [0.5],
-    #     "rhs_sel": 0.5, 
-    #     "dist_params": {
-    #         "dist_type": "zipf", 
-    #         "lhs_dist_alpha": 1.01,
-    #         "lhs_dist_beta": 0, 
-    #         "rhs_dist_alpha": 1.01, 
-    #         "rhs_dist_beta": 0,
-    #         "noise": 0.1,
-    #         "n_type": "copy",
-    #     }
-    # },
-    # {
-    #     "name": "zipf_1m", 
-    #     "tuples": 1_000_000, 
-    #     "lhs_sels": [0.5],
-    #     "rhs_sel": 0.5, 
-    #     "dist_params": {
-    #         "dist_type": "zipf", 
-    #         "lhs_dist_alpha": 1.01, 
-    #         "lhs_dist_beta": 0, 
-    #         "rhs_dist_alpha": 1.01, 
-    #         "rhs_dist_beta": 0,
-    #         "noise": 0.1,
-              #"n_type": "bogus",
-    #     }
-    # },
-    # {
-    #     "name": "zipf_100m", 
-    #     "tuples": 100_000_000, 
-    #     "lhs_sels": [0.5],
-    #     "rhs_sel": 0.5, 
-    #     "dist_params": {
-    #         "dist_type": "zipf", 
-    #         "lhs_dist_alpha": 1.01, 
-    #         "lhs_dist_beta": 0, 
-    #         "rhs_dist_alpha": 1.01, 
-    #         "rhs_dist_beta": 0,
-    #         "noise": 0.1,
-             #"n_type": "bogus",
-    #     }
-    # },
-    # {
-    #     "name": "beta_1m", 
-    #     "tuples": 1_000_000, 
-    #     "lhs_sels": [0.5],
-    #     "rhs_sel": 0.5, 
-    #     "dist_params": {
-    #         "dist_type": "beta",
-    #         "lhs_dist_alpha": 2.0,
-    #         "lhs_dist_beta": 5.0, 
-    #         "rhs_dist_alpha": 2.0,
-    #         "rhs_dist_beta": 5.0,
-    #         "noise": 0.3,
-             #"n_type": "bogus",
-    #     }
-    # },
-]
