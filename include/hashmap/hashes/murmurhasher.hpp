@@ -6,7 +6,7 @@
 #include "hashmap/hashes/buckethash.hpp"
 #include "hashmap/hashes/hasher.hpp"
 #include "hashmap/utils.hpp"
-#include "hedley.h"
+#include "hashmap/hedley.h"
 
 namespace hashmap::hashing {
 
@@ -15,13 +15,20 @@ struct MurmurHasher : public Hasher<KeyT, use_modulo> {
   MurmurHasher(uint64_t maximum_value) : Hasher<KeyT, use_modulo>(maximum_value) {}
 
   HEDLEY_ALWAYS_INLINE static uint64_t static_hash(const KeyT& key) {
-    uint64_t x = key ^ (key >> 33U);
-    x *= utils::murmur_constant1;
-    x ^= x >> 33U;
-    x *= utils::murmur_constant2;
-    x ^= x >> 33U;
+    uint64_t hash = 0;
 
-    return x;
+    for (const auto& elem : key) {
+      uint64_t x = static_cast<uint64_t>(elem);
+      x ^= x >> 33U;
+      x *= utils::murmur_constant1;
+      x ^= x >> 33U;
+      x *= utils::murmur_constant2;
+      x ^= x >> 33U;
+
+      utils::hash_combine(hash, x);
+    }
+
+    return hash;
   }
 
   template <typename FingerprintT, FingerprintBucketBits fbb, FingerprintT invalid_fp = 0>

@@ -279,16 +279,16 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
            std::to_string(fingerprints_per_bucket * sizeof(FingerprintT) * 8) + " bit vector registers, simd size is given as " + 
            std::to_string(simd_size) + " though!");
 
-    if (print_info) {
-      spdlog::info(
-          "Initialized " + std::to_string(get_identifier()) + " with utils::cacheline_size = " + 
-          std::to_string(utils::cacheline_size) + ", sizeof(EntryT) = XX, num_buckets = " + 
-          std::to_string(num_buckets_) + ", alignof(EntryT) = XX, simd_size = " + std::to_string(simd_size) + 
-          ", vector_alignment_func = " + std::to_string(SIMDH::_vector_alignment()) + ".");
-    }
+    // if (print_info) {
+    //   spdlog::info(
+    //       "Initialized " + std::to_string(get_identifier()) + " with utils::cacheline_size = " + 
+    //       std::to_string(utils::cacheline_size) + ", sizeof(EntryT) = XX, num_buckets = " + 
+    //       std::to_string(num_buckets_) + ", alignof(EntryT) = XX, simd_size = " + std::to_string(simd_size) + 
+    //       ", vector_alignment_func = " + std::to_string(SIMDH::_vector_alignment()) + ".");
+    // }
 
     ASSERT(utils::is_power_of_two(max_elements) && utils::is_power_of_two(fingerprints_per_bucket),
-           "Bucketing is optimized towards hash maps that have a maximum size which is a power of two, " +
+           "Bucketing is optimized towards hash maps that have a maximum size which is a power of two, "
            "this hash map is of size " + std::to_string(max_elements) + ".");
 
     fail_if_system_is_incompatible<FingerprintT, simd_size, simd_algo, use_avx512_features, use_sve, neon_algo, sve_scalar_broadcast>();
@@ -553,12 +553,12 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
     std::string bucket_type = BucketT::to_string();
     std::string fps_per_bucket = std::to_string(fingerprints_per_bucket) + "FPPB";
 
-    return std::to_string(base_identifier_) + "<" + std::to_string(hasher_.get_identifier()) + "; " + 
-       std::to_string(key_type) + "; " + std::to_string(value_type) + "; " + std::to_string(fingerprint_type) + "; " + 
-       std::to_string(prefetching) + "; " + std::to_string(thp) + "; " + std::to_string(unroll) + "; " + std::to_string(key_simd_type) + ";" +
-       std::to_string(algo) + "; " + std::to_string(avx512) + "; " + std::to_string(compare_result_type) + "; " + std::to_string(sve) + ";" +
-       std::to_string(neon_algo_str) + "; " + std::to_string(sve_broadcast) + "; " + std::to_string(likely) + "; " + std::to_string(bucket_type) + ";" +
-       std::to_string(fps_per_bucket) + "; " + std::to_string(fingerprints) + "; " + std::to_string(fallback) + ">";
+    return base_identifier_ + "<" + std::to_string(hasher_.get_identifier()) + "; " + 
+       key_type + "; " + value_type + "; " + fingerprint_type + "; " + 
+       prefetching + "; " + thp + "; " + unroll + "; " + key_simd_type + ";" +
+       algo + "; " + avx512 + "; " + compare_result_type + "; " + sve + ";" +
+       neon_algo_str + "; " + sve_broadcast + "; " + likely + "; " + bucket_type + ";" +
+       fps_per_bucket + "; " + fingerprints + "; " + fallback + ">";
   }
 
   uint64_t get_entry_size() { return 0; }

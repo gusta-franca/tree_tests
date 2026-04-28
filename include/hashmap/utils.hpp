@@ -171,6 +171,10 @@ constexpr static uint64_t add_constant_64b = 0x736f6d6570736575;
 constexpr static uint64_t murmur_constant1 = 0xff51afd7ed558ccd;
 constexpr static uint64_t murmur_constant2 = 0xc4ceb9fe1a85ec53;
 
+HEDLEY_ALWAYS_INLINE void hash_combine(uint64_t& seed, uint64_t hash_value) {
+  seed ^= hash_value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+}
+
 enum class PrefetchingLocality { HIGH = 3, MEDIUM = 2, LOW = 1, NO = 0 };
 
 #ifdef __GNUC__

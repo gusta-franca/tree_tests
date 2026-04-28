@@ -71,7 +71,7 @@ struct XXHasher<StringKey, use_modulo> : public XXHasherBase<StringKey, use_modu
 
   HEDLEY_ALWAYS_INLINE static uint64_t static_hash(const StringKey& key) {
     DEBUG_ASSERT(key.string_ != nullptr, "String of key cannot be nullptr.");
-    return static_cast<uint64_t>(XXH3_64bits(key.string_, HASHMAP_STRINGKEY_SIZE));
+    return static_cast<uint64_t>(XXH3_64bits(key.string_, 32));
   }
 
   template <typename FingerprintT, FingerprintBucketBits fbb, FingerprintT invalid_fp = 0>

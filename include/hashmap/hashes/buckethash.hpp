@@ -5,7 +5,7 @@
 #include <numeric>
 
 #include "hashmap/utils.hpp"
-#include "hedley.h"
+#include "hashmap/hedley.h"
 
 namespace hashmap::hashing {
 
