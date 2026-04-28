@@ -146,6 +146,8 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
         {"name": "cpp_mu_plus_auto", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_opt_test"},
         {"name": "cpp_mu_plus_partitioned", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_partitioned_test"},
+        {"name": "cpp_mu_plus_simd_murmur", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
+        {"name": "cpp_mu_plus_simd_xxhash", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
         # {
         #     "name": "cpp_mu_plus_bitmap",
         #     "function": cpp_mu_plus_opt,
@@ -179,7 +181,6 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         load_start = time.time()
         df = pd.read_csv(datapath)
         load_time = time.time() - load_start
-        # plot_rank_frequency(df)
         
         lhs_columns = [f"lhs_{i}" for i in range(scenario["lhs_number"])]
         rhs_column = "rhs"

@@ -2,9 +2,11 @@ import copy
 import logging
 import random
 from typing import Any, Dict, List
-
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+
+from src.benchmark.plot import plot_rank_frequency
 
 
 def generate_tuples(settings: Dict[str, Any]) -> pd.DataFrame:
@@ -27,6 +29,7 @@ def generate_tuples(settings: Dict[str, Any]) -> pd.DataFrame:
     
     df = df.merge(unique_lhs, on = "tuple_id", how = "left")
     
+    # plot_rank_frequency(df)
 
     lhs_number = settings["lhs_number"]
     
@@ -43,7 +46,7 @@ def generate_tuples(settings: Dict[str, Any]) -> pd.DataFrame:
     # Reorder columns so RHS is always at the very end
     lhs_cols = [col for col in df.columns if col != "rhs"]
     df = df[lhs_cols + ["rhs"]]
-    
+        
     return df
     
 

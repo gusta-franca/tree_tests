@@ -1,7 +1,7 @@
 # Makefile for CSV Index with Roaring Bitmaps (GCC version)
 
 CXX = g++
-CXXFLAGS = -std=c++20 -Wall -Wextra -O3 -Isrc/metrics/cpp -Iinclude
+CXXFLAGS = -std=c++20 -Wall -Wextra -O3 -march=native -DHASHMAP_IS_X86 -DIS_LINUX -DNDEBUG -Isrc/metrics/cpp -Iinclude -Iinclude/hashmap
 
 # TARGET = build/bin/csv_indexer
 # SRCS = main.cpp csv_index.cpp roaring.c
@@ -57,7 +57,13 @@ _FD_METRICS_PARTITIONED_TEST_OBJS = $(FD_METRICS_PARTITIONED_TEST_SRCS:.cpp=.o)
 _FD_METRICS_PARTITIONED_TEST_OBJS := $(_FD_METRICS_PARTITIONED_TEST_OBJS:.c=.o)
 FD_METRICS_PARTITIONED_TEST_OBJS = $(addprefix build/obj/, $(_FD_METRICS_PARTITIONED_TEST_OBJS))
 
-.PHONY: all clean run setup directories fd_input fd_checker_test fd_metrics_test fd_metrics_opt_test fd_metrics_partitioned_test
+BUCKETING_SIMD_TEST_TARGET = build/bin/bucketing_simd_test
+BUCKETING_SIMD_TEST_SRCS = bucketing_simd_test.cpp simd_pdep.cpp utils.cpp fd_input.cpp csv_index.cpp roaring.c 
+_BUCKETING_SIMD_TEST_OBJS = $(BUCKETING_SIMD_TEST_SRCS:.cpp=.o)
+_BUCKETING_SIMD_TEST_OBJS := $(_BUCKETING_SIMD_TEST_OBJS:.c=.o)
+BUCKETING_SIMD_TEST_OBJS = $(addprefix build/obj/, $(_BUCKETING_SIMD_TEST_OBJS))
+
+.PHONY: all clean run setup directories fd_input fd_checker_test fd_metrics_test fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test
 
 directories:
 	@mkdir -p build/obj
@@ -79,6 +85,8 @@ fd_metrics_test: setup $(FD_METRICS_TEST_TARGET)
 fd_metrics_opt_test: setup $(FD_METRICS_OPT_TEST_TARGET)
 
 fd_metrics_partitioned_test: setup $(FD_METRICS_PARTITIONED_TEST_TARGET)
+
+bucketing_simd_test: setup $(BUCKETING_SIMD_TEST_TARGET)
 
 # $(TARGET): $(OBJS)
 # 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -105,6 +113,9 @@ $(FD_METRICS_OPT_TEST_TARGET): $(FD_METRICS_OPT_TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(FD_METRICS_PARTITIONED_TEST_TARGET): $(FD_METRICS_PARTITIONED_TEST_OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+$(BUCKETING_SIMD_TEST_TARGET): $(BUCKETING_SIMD_TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 build/obj/%.o: src/metrics/cpp/%.cpp | directories
