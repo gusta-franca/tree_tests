@@ -112,16 +112,17 @@ def introduce_noise_copy(settings: Dict[str, Any], df: pd.DataFrame) -> Dict[int
     
     X_values_df = potential_noisy_indices(df, noisy_k)
     
+    lhs_columns = [column for column in df.columns if column != 'rhs']
     lhs_tuples_list = [tuple(x) for x in X_values_df.to_numpy()]
     tuples_count = pd.Series(lhs_tuples_list).value_counts()   
      
     df_noisy = df.copy()
     indices_noisy = []
-    lhs_columns = [column for column in df.columns if column != 'rhs']
+    
+    group_indices = df.groupby(lhs_columns).indices
 
     for tupl, n in tuples_count.items():
-        mask = (df[lhs_columns] == tupl).all(axis = 1)
-        possible_indices = df[mask].index
+        possible_indices = group_indices.get(tupl, [])
         
         if len(possible_indices) >= n:
             rows_noisy = np.random.choice(possible_indices, size = n, replace = False)
