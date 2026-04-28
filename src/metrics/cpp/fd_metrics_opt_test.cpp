@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sys/resource.h>
 #include "fd_metrics_opt.h"
+#include "csv_index.h"
 
 void print_usage(const char* prog_name) {
     std::cerr << "Usage: " << prog_name << " <csv_file> <fd_file> [-o output_file] [-m metric] [-v]" << std::endl;

@@ -8,6 +8,25 @@
 #include "ankerl/unordered_dense.h"
 #include "roaring.hh"
 
+// Simple columnar data structure - no indexes!
+struct ColumnarData {
+    std::vector<std::string> column_names;
+    std::vector<std::vector<uint32_t>> columns;  // column-major data
+    size_t num_rows;
+    
+    // Statistics computed on-demand
+    mutable std::vector<size_t> distinct_counts;  // cached distinct counts
+    
+    ColumnarData() : num_rows(0) {}
+    
+    size_t get_column_index(const std::string& name) const;
+    size_t get_distinct_count(size_t col_idx) const;
+};
+
+// Load CSV directly into columnar format (no indexing)
+bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool verbose = false);
+
+
 // Represents an indexed column with value -> roaring bitmap mapping
 struct ColumnIndex {
     // --- Data Members ---
