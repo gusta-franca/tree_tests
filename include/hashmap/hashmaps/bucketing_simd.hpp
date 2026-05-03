@@ -249,6 +249,10 @@ class KeyValueAoSStoringBucket {
 
   static std::string to_string() { return "KeyValueAoSStoringBucket"; }
 
+  uint8_t get_element_count() const { return next_free_entry; }
+  
+  const std::pair<KeyT, ValueT>& get_kv_pair(uint8_t index) const {return keys_values_[index]; }
+
  private:
   uint8_t next_free_entry = 0;
   bool overflowed_ = false;  // only if this is true, we will need to follow to next_bucket in case we don't find it within our chunk
@@ -572,6 +576,17 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
   uint64_t get_num_buckets() { return num_buckets_; }
   BucketT* get_ith_bucket(uint32_t i) { return &buckets_[i]; }
   uint64_t get_current_size() { return size_; }
+
+  template <typename Func>
+  void each(Func&& func) const {
+    for (uint64_t b_idx = 0; b_idx < num_buckets_; b_idx++) {
+      uint8_t b_items_count = buckets_[b_idx].get_element_count();
+      
+      for (uint8_t i = 0; i < b_items_count; i++) {
+        func(buckets_[b_idx].get_kv_pair(i));
+      }
+    }
+  }
 
 #ifdef HASHMAP_COLLECT_META_INFO
   utils::MeasurementInfo* get_minfo() { return &minfo; }
