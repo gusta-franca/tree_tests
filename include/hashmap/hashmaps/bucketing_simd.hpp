@@ -588,6 +588,14 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
     }
   }
 
+  // returns the total memory used by the hashtable in bytes
+  size_t get_memory_usage() const {
+    size_t b_memory = buckets_.capacity() * sizeof(BucketT);
+    size_t obj_memory = sizeof(*this);
+
+    return b_memory + obj_memory;
+  }
+
 #ifdef HASHMAP_COLLECT_META_INFO
   utils::MeasurementInfo* get_minfo() { return &minfo; }
   void start_measurement() { minfo.measurement_started = true; }
