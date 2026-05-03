@@ -44,64 +44,53 @@ scenarios = [
             "n_type": "copy",
         }
     },
-    # {
-    #     "name": "zipf_120k", 
-    #     "tuples": 120_000, 
-    #     "lhs_sels": [0.5],
-    #     "rhs_sel": 0.5, 
-    #     "dist_params": {
-    #         "dist_type": "zipf", 
-    #         "lhs_dist_alpha": 1.01,
-    #         "lhs_dist_beta": 0, 
-    #         "rhs_dist_alpha": 1.01, 
-    #         "rhs_dist_beta": 0,
-    #         "noise": 0.1,
-    #         "n_type": "copy",
-    #     }
-    # },
-    # {
-    #     "name": "zipf_1m", 
-    #     "tuples": 1_000_000, 
-    #     "lhs_sels": [0.5],
-    #     "rhs_sel": 0.5, 
-    #     "dist_params": {
-    #         "dist_type": "zipf", 
-    #         "lhs_dist_alpha": 1.01, 
-    #         "lhs_dist_beta": 0, 
-    #         "rhs_dist_alpha": 1.01, 
-    #         "rhs_dist_beta": 0,
-    #         "noise": 0.1,
-              #"n_type": "bogus",
-    #     }
-    # },
+    {
+        "name": "zipf_2m", 
+        "tuples": 2_000_000,
+        "tuple_sel": 0.1,
+        "lhs_number": 3,
+        "rhs_sel": 0.01, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_10m", 
+        "tuples": 10_000_000,
+        "tuple_sel": 0.1,
+        "lhs_number": 7,
+        "rhs_sel": 0.01, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    # Chashes
     # {
     #     "name": "zipf_100m", 
-    #     "tuples": 100_000_000, 
-    #     "lhs_sels": [0.5],
-    #     "rhs_sel": 0.5, 
+    #     "tuples": 100_000_000,
+    #     "tuple_sel": 0.1,
+    #     "lhs_number": 7,
+    #     "rhs_sel": 0.01, 
     #     "dist_params": {
     #         "dist_type": "zipf", 
     #         "lhs_dist_alpha": 1.01, 
     #         "lhs_dist_beta": 0, 
     #         "rhs_dist_alpha": 1.01, 
     #         "rhs_dist_beta": 0,
-    #         "noise": 0.1,
-             #"n_type": "bogus",
-    #     }
-    # },
-    # {
-    #     "name": "beta_1m", 
-    #     "tuples": 1_000_000, 
-    #     "lhs_sels": [0.5],
-    #     "rhs_sel": 0.5, 
-    #     "dist_params": {
-    #         "dist_type": "beta",
-    #         "lhs_dist_alpha": 2.0,
-    #         "lhs_dist_beta": 5.0, 
-    #         "rhs_dist_alpha": 2.0,
-    #         "rhs_dist_beta": 5.0,
-    #         "noise": 0.3,
-             #"n_type": "bogus",
+    #         "noise": 0.01,
+    #         "n_type": "copy",
     #     }
     # },
 ]

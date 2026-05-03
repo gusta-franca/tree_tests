@@ -27,7 +27,9 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
 
     // Row count will be the size of any entry in data.columns, as it is columnar
     size_t num_rows = data.columns[0].size();
-    uint64_t table_size = hashmap::utils::np2(num_rows);
+
+    // Initial table size; if needed, BucketingSIMDHashTable will double it
+    uint64_t table_size = std::pow(2, 20);
 
     // Counting XY from data
     hashmap::hashmaps::BucketingSIMDHashTable<XYKey, uint32_t, HasherXY> xy_table(table_size, 0);
