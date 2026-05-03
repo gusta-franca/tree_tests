@@ -10,10 +10,8 @@ using MurmurT = hashmap::hashing::MurmurHasher<std::array<uint32_t, N>, false>;
 template <size_t N>
 using XXHashT = hashmap::hashing::XXHasher<std::array<uint32_t, N>, false>;
 
-
-template <size_t N, typename HasherX, typename HasherXY>
+template <size_t N, typename HasherX, typename HasherY, typename HasherXY>
 PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx) {
-    
     std::chrono::duration<double> total_build_time(0);
     std::chrono::duration<double> total_compute_time(0);
     size_t peak_memory_b = 0;
@@ -24,6 +22,7 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
 
     // Arrays holding the X and Y columns; there will be one for every row
     using XKey = std::array<uint32_t, N>;
+    using YKey = std::array<uint32_t, 1>;
     using XYKey = std::array<uint32_t, N+1>;
 
     // Row count will be the size of any entry in data.columns, as it is columnar
@@ -51,8 +50,7 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
     // Couting X and Y from XY
     hashmap::hashmaps::BucketingSIMDHashTable<XKey, uint32_t, HasherX> x_table(table_size, 0);
     
-    // Maybe use std::vector intead? 
-    std::unordered_map<uint32_t, uint32_t> y_counts;
+    hashmap::hashmaps::BucketingSIMDHashTable<YKey, uint32_t, HasherY> y_table(table_size, 0);
 
     xy_table.each([&](const auto& kv_pair) {
         const XYKey& xy_key = kv_pair.first;
@@ -64,11 +62,15 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
         uint32_t current_x_count = x_table.lookup(x_key);
         x_table.insert(x_key, current_x_count + xy_count);
         
-        y_counts[xy_key[N]] += xy_count;
+        YKey y_key = {xy_key[N]};
+        uint32_t current_y_count = y_table.lookup(y_key);
+        y_table.insert(y_key, current_y_count + xy_count);
     });
 
     auto build_end = std::chrono::steady_clock::now();
     total_build_time += (build_end - build_start);
+
+    peak_memory_b = x_table.get_memory_usage() + y_table.get_memory_usage() + xy_table.get_memory_usage();
 
     // Compute mu plus
     auto compute_start = std::chrono::steady_clock::now();
@@ -93,10 +95,10 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
     // Compute pdep Y
     double pdep_Y = 0.0;
 
-    for (const auto& [y_key, y_count] : y_counts) {
-        double count = static_cast<double>(y_count);
+    y_table.each([&](const auto& kv_pair) {
+        double count = static_cast<double>(kv_pair.second);
         pdep_Y += (count * count);
-    }
+    });
 
     pdep_Y /= static_cast<double>(num_rows) * num_rows;
 
@@ -130,14 +132,14 @@ template <size_t N>
 PdepResult dispatch_hasher(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx, const std::string& hash_algo) {
      
     if (hash_algo == "murmur") {
-        return execute_simd<N, MurmurT<N>, MurmurT<N+1>>(data, lhs_indices, rhs_idx);
+        return execute_simd<N, MurmurT<N>, MurmurT<1>, MurmurT<N+1>>(data, lhs_indices, rhs_idx);
     }
 
     else if (hash_algo == "xxhash") {
-        return execute_simd<N, XXHashT<N>, XXHashT<N+1>>(data, lhs_indices, rhs_idx);
+        return execute_simd<N, XXHashT<N>, XXHashT<1>, XXHashT<N+1>>(data, lhs_indices, rhs_idx);
     }
 
-    return execute_simd<N, MurmurT<N>, MurmurT<N+1>>(data, lhs_indices, rhs_idx);
+    return execute_simd<N, MurmurT<N>, MurmurT<1>, MurmurT<N+1>>(data, lhs_indices, rhs_idx);
     
 }
 
