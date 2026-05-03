@@ -30,8 +30,6 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
     size_t num_rows = data.columns[0].size();
     uint64_t table_size = hashmap::utils::np2(num_rows);
 
-    std::vector<XYKey> unique_xy_keys;
-
     // Counting XY from data
     hashmap::hashmaps::BucketingSIMDHashTable<XYKey, uint32_t, HasherXY> xy_table(table_size, 0);
 
@@ -47,28 +45,27 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
         // Increments the current XY count if xy_key is already inserted on the hashtable; otherwise, inserts it with count = 0
         uint32_t current_count = xy_table.lookup(xy_key);
 
-        if (current_count == 0) {
-            unique_xy_keys.push_back(xy_key);
-        }
-
         xy_table.insert(xy_key, current_count+1);
     }
 
     // Couting X and Y from XY
     hashmap::hashmaps::BucketingSIMDHashTable<XKey, uint32_t, HasherX> x_table(table_size, 0);
+    
+    // Maybe use std::vector intead? 
     std::unordered_map<uint32_t, uint32_t> y_counts;
 
-    for (const XYKey& xy_key : unique_xy_keys) {
-        uint32_t xy_count = xy_table.lookup(xy_key);
-
+    xy_table.each([&](const auto& kv_pair) {
+        const XYKey& xy_key = kv_pair.first;
+        uint32_t xy_count = kv_pair.second;;
+        
         XKey x_key;
         std::copy(xy_key.begin(), xy_key.begin() + N, x_key.begin());
-
+        
         uint32_t current_x_count = x_table.lookup(x_key);
         x_table.insert(x_key, current_x_count + xy_count);
-
+        
         y_counts[xy_key[N]] += xy_count;
-    }
+    });
 
     auto build_end = std::chrono::steady_clock::now();
     total_build_time += (build_end - build_start);
@@ -79,8 +76,9 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
     double global_sum = 0.0;
 
     // Compute pdep_XY
-    for (const XYKey& xy_key : unique_xy_keys) {
-        uint32_t xy_count = xy_table.lookup(xy_key);
+    xy_table.each([&](const auto& kv_pair) {
+        const XYKey& xy_key = kv_pair.first;
+        uint32_t xy_count = kv_pair.second;
 
         XKey x_key;
         std::copy(xy_key.begin(), xy_key.begin() + N, x_key.begin());
@@ -88,7 +86,8 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
         uint32_t x_count = x_table.lookup(x_key);
 
         global_sum += (static_cast<double>(xy_count) * xy_count) / x_count;
-    }
+    });
+
     double pdep_XY = global_sum / static_cast<double>(num_rows);
     
     // Compute pdep Y
@@ -98,6 +97,7 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
         double count = static_cast<double>(y_count);
         pdep_Y += (count * count);
     }
+
     pdep_Y /= static_cast<double>(num_rows) * num_rows;
 
     size_t dom_x_size = x_table.get_current_size();
@@ -124,7 +124,6 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
     result.memory_used_mb = peak_memory_b / (1024.0 * 1024.0);
 
     return result;
-
 }
 
 template <size_t N>
