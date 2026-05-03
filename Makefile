@@ -72,7 +72,7 @@ directories:
 setup: directories
 	@./setup_deps.sh
 
-all: setup $(TARGET)
+all: setup fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test
 
 test: setup $(TEST_TARGET)
 
