@@ -245,6 +245,10 @@ class KeyValueAoSStoringBucket {
     keys_values_[index_in_bucket] = {key, value};
   }
 
+  HEDLEY_ALWAYS_INLINE void increment_value(const ValueT& value, uint16_t index_in_bucket) {
+    std::get<1>(keys_values_[index_in_bucket]) += value;
+  }
+
   bool is_overflowed() { return overflowed_; }
 
   static std::string to_string() { return "KeyValueAoSStoringBucket"; }
@@ -382,6 +386,63 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
       }
     }
   }
+
+  void increment(const KeyT& key, const ValueT& value = 1) {
+    DEBUG_ASSERT(size_ + 1 <= max_elements_, "Hashmap is full!");
+
+    const hashing::BucketHash<FingerprintT> bucket_hash =
+        hasher_.template bucket_hash<FingerprintT, fingerprint_bucket_bits, invalid_fingerprint>(key);
+    uint32_t bucket_idx = static_cast<uint32_t>(bucket_hash.bucket);
+    const FingerprintT fingerprint = bucket_hash.fingerprint;
+
+    FindResult result;
+    // Check if element already exists in hashmap; if so, increment
+    if constexpr (use_likely_hints) {
+      if (HEDLEY_UNLIKELY((result = find_impl(key, fingerprint, bucket_idx)).res.is_valid)) [[unlikely]] {
+        return result.res.target_bucket->increment_value(value, result.res.index_in_bucket);
+      }
+    } else {
+      if ((result = find_impl(key, fingerprint, bucket_idx)).res.is_valid) {
+        return result.res.target_bucket->increment_value(value, result.res.index_in_bucket);
+      }
+    }
+
+    uint32_t bucket_number = result.probe_length;
+    bucket_idx = result.bucket_idx;
+
+    for (; bucket_number <= num_buckets_; ++bucket_number) {
+  #ifdef HASHMAP_COLLECT_META_INFO
+        const bool insert_sucessful = buckets_[bucket_idx].insert(key, value, fingerprint, &minfo);
+  #else
+        const bool insert_sucessful = buckets_[bucket_idx].insert(key, value, fingerprint);
+  #endif
+
+      if constexpr (use_likely_hints) {
+        if (HEDLEY_LIKELY(insert_sucessful)) [[likely]] {
+          ++size_;
+          max_bucket_chain = std::max(max_bucket_chain, static_cast<uint64_t>(bucket_number));
+          return;
+        }
+      } else {
+        if (insert_sucessful) {
+          ++size_;
+          max_bucket_chain = std::max(max_bucket_chain, static_cast<uint64_t>(bucket_number));
+          return;
+        }
+      }
+
+      if constexpr (use_likely_hints) {
+        if (HEDLEY_LIKELY(bucket_idx < num_buckets_ - 1)) [[likely]] {
+          ++bucket_idx;
+        } else {
+          bucket_idx = 0;
+        }
+      } else {
+        bucket_idx = (bucket_idx == num_buckets_ - 1) ? 0 : bucket_idx + 1;
+      }
+    }
+  }
+
 
   FindResult find(const KeyT& key) {
 #ifdef HASHMAP_COLLECT_META_INFO
@@ -577,6 +638,7 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
   BucketT* get_ith_bucket(uint32_t i) { return &buckets_[i]; }
   uint64_t get_current_size() { return size_; }
 
+  // Talvez armazenar um bitmap para evitar vários espaços vazios
   template <typename Func>
   void each(Func&& func) const {
     for (uint64_t b_idx = 0; b_idx < num_buckets_; b_idx++) {
