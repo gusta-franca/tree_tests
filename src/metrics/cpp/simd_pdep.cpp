@@ -43,10 +43,8 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
         // Nth slot is reserved for Y 
         xy_key[N] = data.columns[rhs_idx][row];
 
-        // Increments the current XY count if xy_key is already inserted on the hashtable; otherwise, inserts it with count = 0
-        uint32_t current_count = xy_table.lookup(xy_key);
-
-        xy_table.insert(xy_key, current_count+1);
+        // Increments the current XY count if xy_key is already inserted on the hashtable; otherwise, inserts it with count = 1
+        xy_table.increment(xy_key);
     }
 
     // Couting X and Y from XY
@@ -60,13 +58,10 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
         
         XKey x_key;
         std::copy(xy_key.begin(), xy_key.begin() + N, x_key.begin());
-        
-        uint32_t current_x_count = x_table.lookup(x_key);
-        x_table.insert(x_key, current_x_count + xy_count);
+        x_table.increment(x_key, xy_count);
         
         YKey y_key = {xy_key[N]};
-        uint32_t current_y_count = y_table.lookup(y_key);
-        y_table.insert(y_key, current_y_count + xy_count);
+        y_table.increment(y_key, xy_count);
     });
 
     auto build_end = std::chrono::steady_clock::now();
