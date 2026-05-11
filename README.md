@@ -1,6 +1,6 @@
 ## Compiling and Running
 
-### Run all implementations
+### Run all tests
 
 Inside the root folder:
 - ```$ make all```
