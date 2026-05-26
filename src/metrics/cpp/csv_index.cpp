@@ -10,6 +10,9 @@
 #include <thread>
 #include <sys/resource.h>
 #include "csv.h"
+#include "fd_input.h"
+#include "hyperloglog.hpp"
+#include "hashmap/hashes/murmurhasher.hpp"
 
 // -- ColumnarData Implementationm ---
 
@@ -126,6 +129,116 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
     
     return true;
 }
+
+bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FDSpec& fd, size_t& est_xy_card, bool verbose) {
+    using clock = std::chrono::steady_clock;
+    auto t_start = clock::now();
+    
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: Cannot open file: " << filename << std::endl;
+        return false;
+    }
+    
+    // Parse header
+    std::string header_line;
+    if (!std::getline(file, header_line)) {
+        std::cerr << "Error: Empty file" << std::endl;
+        return false;
+    }
+    
+    std::stringstream ss(header_line);
+    std::string col_name;
+    while (std::getline(ss, col_name, ',')) {
+        // Trim whitespace
+        size_t start = col_name.find_first_not_of(" \t\r\n");
+        size_t end = col_name.find_last_not_of(" \t\r\n");
+        if (start != std::string::npos) {
+            col_name = col_name.substr(start, end - start + 1);
+        }
+        data.column_names.push_back(col_name);
+    }
+    
+    data.columns.resize(data.column_names.size());
+
+    // Initialize HLL
+    hll::HyperLogLog hll_xy(14);
+
+    // Resolve LHS/RHS
+    std::vector<size_t> lhs_indices;
+    for (const auto& name : fd.lhs_columns) {
+        lhs_indices.push_back(data.get_column_index(name));
+    }
+    size_t rhs_idx = data.get_column_index(fd.rhs_column);
+    
+    if (verbose) {
+        std::cout << "Columns: ";
+        for (size_t i = 0; i < data.column_names.size(); ++i) {
+            std::cout << data.column_names[i];
+            if (i + 1 < data.column_names.size()) std::cout << ", ";
+        }
+        std::cout << std::endl;
+    }
+
+    std::vector<uint32_t> fd_row;
+    fd_row.reserve(lhs_indices.size() + 1);
+    
+    // Parse data rows
+    std::string line;
+    size_t row_count = 0;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        
+        std::stringstream row_ss(line);
+        std::string cell;
+        size_t col_idx = 0;
+        std::vector<uint32_t> current_row(data.columns.size());
+        
+        while (std::getline(row_ss, cell, ',') && col_idx < data.columns.size()) {
+            uint32_t value = 0;
+            try {
+                value = std::stoul(cell);
+            } catch (...) {
+                value = 0;
+            }
+            data.columns[col_idx].push_back(value);
+            current_row[col_idx] = value;
+            ++col_idx;
+        }
+        
+        // Pad short rows
+        while (col_idx < data.columns.size()) {
+            data.columns[col_idx].push_back(0);
+            ++col_idx;
+        }
+
+        // Hash and add to HLL
+        fd_row.clear();
+        for (size_t idx : lhs_indices) {
+            fd_row.push_back(current_row[idx]);
+        }
+        fd_row.push_back(current_row[rhs_idx]);
+
+        uint64_t hash = hashmap::hashing::MurmurHasher<std::vector<uint32_t>, false>::static_hash(fd_row);        
+        hll_xy.add(hash);
+
+        ++row_count;
+    }
+    
+    data.num_rows = row_count;
+    est_xy_card = hll_xy.estimate();
+    
+    auto t_end = clock::now();
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
+    
+    if (verbose) {
+        std::cout << "Loaded " << row_count << " rows in " << elapsed_ms << " ms" << std::endl;
+        std::cout << "No indexes built - pure columnar storage" << std::endl;
+    }
+    
+    return true;
+}
+
 
 // --- ColumnIndex Implementation ---
 

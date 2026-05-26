@@ -23,9 +23,13 @@ struct ColumnarData {
     size_t get_distinct_count(size_t col_idx) const;
 };
 
+struct FDSpec;
+
 // Load CSV directly into columnar format (no indexing)
 bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool verbose = false);
 
+// Load CSV and estimate XY cardinality
+bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FDSpec& fd, size_t& est_xy_card, bool verbose = false);
 
 // Represents an indexed column with value -> roaring bitmap mapping
 struct ColumnIndex {
