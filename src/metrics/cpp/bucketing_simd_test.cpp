@@ -5,8 +5,8 @@
 #include <sstream>  
 #include <string>
 
-#include "fd_input.h"
 #include "csv_index.h"
+#include "fd_input.h"
 #include "simd_pdep.h"
 
 
@@ -33,12 +33,15 @@ int main(int argc, char* argv[]) {
     }
     
     ColumnarData data;
-    if (!load_csv_columnar(csv_file, data, false)) {
+    size_t est_xy_card = 0;
+    if (!load_csv_columnar(csv_file, data, fd, est_xy_card, false)) {
         std::cerr << "Error: Failed to load CSV file" << std::endl;
         return 1;
     }
 
-    PdepResult result = compute_pdep(data, fd, algo);
+    std::cout << est_xy_card << std::endl;
+
+    PdepResult result = compute_pdep(data, fd, algo, est_xy_card);
 
     std::cout << result.metric_value << "," 
               << result.build_time_s << "," 
