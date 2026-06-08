@@ -1,12 +1,12 @@
 #include <bit>
 #include <cmath>
 #include <iostream>
+#define XXH_INLINE_ALL 1
 #include "ankerl/unordered_dense.h"
 #include "metrics.h"
 #include "simd_metrics.h"
-
-#define XXH_INLINE_ALL
 #include "xxhash.h"
+
 
 template <size_t N>
 struct array_hash {
@@ -50,15 +50,7 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
         // Increments the current XY count if xy_key is already inserted on the hashtable; otherwise, inserts it with count = 1
         xy_table[xy_key]++;
     }
-
-    // size_t actual_xy_size = xy_table.get_current_size();
-    // std::cout << "JSON_METRICS: {"
-    //       << "\"num_rows\":" << num_rows << ","
-    //       << "\"est_card\":" << est_xy_card << ","
-    //       << "\"actual_card\":" << actual_xy_size << ","
-    //       << "\"error_pct\":" << (std::abs(static_cast<double>(est_xy_card) - actual_xy_size) / actual_xy_size * 100.0)
-    //       << "}" << std::endl;
-
+    
     // Couting X and Y from XY
     // X or Y will have sizes at max equal to xy_table.size()
     uint64_t max_size = xy_table.size();

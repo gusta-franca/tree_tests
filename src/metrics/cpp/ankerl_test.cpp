@@ -24,6 +24,9 @@ int main(int argc, char* argv[]) {
         algo = argv[4]; 
     }
 
+    std::chrono::duration<double> load_time_s(0);
+    auto load_start = std::chrono::steady_clock::now();
+
     FDSpec fd;
     fd.rhs_column = rhs_str;
     std::stringstream ss(lhs_str);
@@ -39,12 +42,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::cout << est_xy_card << std::endl;
+    auto load_end = std::chrono::steady_clock::now();
+    load_time_s = (load_end - load_start);
 
     Results result = compute_metrics(data, fd, algo, est_xy_card);
 
     std::cout << result.mu_plus << "," 
               << result.rfi_prime_plus << "," 
+              << load_time_s.count() << ","
               << result.build_time_s << "," 
               << result.compute_time_s << "," 
               << result.memory_used_mb << std::endl;
