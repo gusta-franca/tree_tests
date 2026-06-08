@@ -32,7 +32,7 @@ namespace hll {
         void add (uint64_t hash) {
             uint32_t b_idx = hash >> (64 - p);
             uint64_t r_idx = (hash << p) | (1ULL << (p - 1)); // (1 << (p - 1)) prevents couting zeros from b_idx
-            uint8_t rank = static_cast<uint8_t>(std::countl_zero(r_idx)) + 1; // + 1 for HLL rank definition, use __builtni_clzll() if std::countl_zero() doesn't work
+            uint8_t rank = static_cast<uint8_t>(std::countl_zero(r_idx)) + 1; // + 1 for HLL rank definition; use __builtni_clzll() if std::countl_zero() doesn't work
             
             if (rank > M[b_idx]) {
                 M[b_idx] = rank;

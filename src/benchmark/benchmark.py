@@ -120,7 +120,11 @@ def save_results(results: List[Dict[str, Any]]):
     print(f"\nResults saved in {filepath}")
     
 
-def run_python_metric(metric_func, df, lhs, rhs):
+def run_python_metric(metric_func, csv_filepath, lhs, rhs):
+    
+    load_start = time.time();
+    df = pd.read_csv(csv_filepath);
+    load_time = time.time() - load_start
     
     tracemalloc.start()
     start_time = time.time()
@@ -133,6 +137,7 @@ def run_python_metric(metric_func, df, lhs, rhs):
     
     return {
         "result_value": result["result"],
+        "load_time_s": load_time,
         "build_time_s": 0.0,  # Pandas builds and computes at the same time 
         "compute_time_s": compute_time,
         "memory_used_mb": memory_peak / (1024 * 1024)
@@ -142,15 +147,16 @@ def run_python_metric(metric_func, df, lhs, rhs):
 def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
     
     metrics_config = [
-        # {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
-        # {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
+        {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
+        {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
         # {"name": "cpp_mu_plus_auto", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_opt_test"},
         # {"name": "cpp_mu_plus_partitioned", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_partitioned_test"},
         # {"name": "cpp_mu_plus_simd_murmur", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
         # {"name": "cpp_mu_plus_simd_xxhash", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
         # {"name": "py_rfi_prime_plus", "function": reliable_fraction_of_information_prime_plus, "is_cpp": False},
-        {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
+        # {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
         {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
+        {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
         # {
         #     "name": "cpp_mu_plus_bitmap",
         #     "function": cpp_mu_plus_opt,
@@ -174,10 +180,6 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
     for scenario in scenarios:        
         datapath = get_dataset_path(scenario)
 
-        load_start = time.time()
-        df = pd.read_csv(datapath)
-        load_time = time.time() - load_start
-        
         lhs_columns = [f"lhs_{i}" for i in range(scenario["lhs_number"])]
         rhs_column = "rhs"
         
@@ -186,7 +188,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
             
             if config["is_cpp"]:
                 stats = config["function"](
-                    filepath = datapath, 
+                    csv_filepath = datapath, 
                     lhs = lhs_columns, 
                     rhs = rhs_column,
                     binary_name = config["binary_name"],
@@ -195,12 +197,13 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
             else:
                 stats = run_python_metric(
                     metric_func = config["function"], 
-                    df = df, 
+                    csv_filepath = datapath,
                     lhs = lhs_columns, 
                     rhs = rhs_column
                 )
                 
-            build_time = round(stats.get("build_time_s", 0.0), 5)
+            load_time = round(stats["load_time_s"], 5)
+            build_time = round(stats["build_time_s"], 5)
             compute_time = round(stats["compute_time_s"], 5)
             total_time = round(load_time + build_time + compute_time, 5)
             memory_used = round(stats["memory_used_mb"], 5)

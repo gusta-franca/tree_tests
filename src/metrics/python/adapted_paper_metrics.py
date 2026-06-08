@@ -3,9 +3,6 @@ from typing import Any, List
 import numpy as np
 import pandas as pd
 import math
-from subprocess import PIPE
-
-
 
 def mu(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> float:
     """This measure is mu as defined by [Piatetsky-Shapiro & Matheus, 1993], adapted for lists of columns."""

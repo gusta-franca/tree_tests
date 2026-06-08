@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import subprocess
 from typing import Any, Dict, List
@@ -42,25 +43,4 @@ def mu_plus_opt(df: pd.DataFrame, lhs: List[Any], rhs: Any) -> Dict[str, Any]:
         "is_key": False,
         "lhs_uniqueness": lhs_uniqueness,
         "lhs_size": len(lhs),
-    }
-    
-
-def cpp_mu_plus_opt(filepath: str, lhs: list[str], rhs: str,  binary_name: str, algo: str = "auto"):
-    
-    binary_path = f"build/bin/{binary_name}" 
-    
-    lhs_str = ",".join(lhs)
-    
-    cmd = [binary_path, filepath, lhs_str, rhs, algo]
-    
-    result = subprocess.run(cmd, capture_output = True, text = True)
-
-    output = result.stdout.strip().split('\n')[-1] # Get last printed line
-    parts = output.split(',')
-    
-    return {
-        "result_value": float(parts[0]),
-        "build_time_s": float(parts[1]),
-        "compute_time_s": float(parts[2]),
-        "memory_used_mb": float(parts[3])
     }
