@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <iostream>
 #include <utility>
@@ -278,6 +279,7 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
                          std::string base_identifier = "BucketingSIMDHashTable")
       : num_buckets_{std::max((max_elements / fingerprints_per_bucket), static_cast<uint64_t>(1))},
         buckets_(num_buckets_, BucketT(invalid_fingerprint)),
+        bucket_bitmap_((max_elements / fingerprints_per_bucket) / 64, 0),
         max_elements_{max_elements},
         size_{0},
         hasher_(num_buckets_),
@@ -363,12 +365,15 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
 
       if constexpr (use_likely_hints) {
         if (HEDLEY_LIKELY(insert_sucessful)) [[likely]] {
+          // bucket_idx / 64 to find where the bucket will be located in the bitmap; 1ULL << (bucket_idx % 64) sets the bucket's bit 
+          bucket_bitmap_[bucket_idx / 64] |= 1ULL << (bucket_idx % 64);
           ++size_;
           max_bucket_chain = std::max(max_bucket_chain, static_cast<uint64_t>(bucket_number));
           return;
         }
       } else {
         if (insert_sucessful) {
+          bucket_bitmap_[bucket_idx / 64] |= 1ULL << (bucket_idx % 64);
           ++size_;
           max_bucket_chain = std::max(max_bucket_chain, static_cast<uint64_t>(bucket_number));
           return;
@@ -419,12 +424,14 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
 
       if constexpr (use_likely_hints) {
         if (HEDLEY_LIKELY(insert_sucessful)) [[likely]] {
+          bucket_bitmap_[bucket_idx / 64] |= 1ULL << (bucket_idx % 64);
           ++size_;
           max_bucket_chain = std::max(max_bucket_chain, static_cast<uint64_t>(bucket_number));
           return;
         }
       } else {
         if (insert_sucessful) {
+          bucket_bitmap_[bucket_idx / 64] |= 1ULL << (bucket_idx % 64);
           ++size_;
           max_bucket_chain = std::max(max_bucket_chain, static_cast<uint64_t>(bucket_number));
           return;
@@ -638,14 +645,24 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
   BucketT* get_ith_bucket(uint32_t i) { return &buckets_[i]; }
   uint64_t get_current_size() { return size_; }
 
-  // Talvez armazenar um bitmap para evitar vários espaços vazios
   template <typename Func>
   void each(Func&& func) const {
-    for (uint64_t b_idx = 0; b_idx < num_buckets_; b_idx++) {
-      uint8_t b_items_count = buckets_[b_idx].get_element_count();
-      
-      for (uint8_t i = 0; i < b_items_count; i++) {
-        func(buckets_[b_idx].get_kv_pair(i));
+    for (size_t i = 0; i < bucket_bitmap_.size(); i++) {
+      uint64_t mask = bucket_bitmap_[i];
+
+      // Loop until we find every non-empty bucket  
+      while (mask) {
+        // (i * 64) to acecss the current bitmap entry, count trailing zeros to access the next non-empty bucket
+        uint64_t b_idx = (i * 64) + std::countr_zero(mask);
+
+        uint8_t b_items_count = buckets_[b_idx].get_element_count();
+
+        for (uint8_t j = 0; j < b_items_count; j++) {
+          func(buckets_[b_idx].get_kv_pair(j));
+        }
+
+        // clears the bit of the current bucket
+        mask &= (mask - 1);
       }
     }
   }
@@ -653,9 +670,10 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
   // returns the total memory used by the hashtable in bytes
   size_t get_memory_usage() const {
     size_t b_memory = buckets_.capacity() * sizeof(BucketT);
+    size_t bitmap_memory = bucket_bitmap_.capacity() * sizeof(uint64_t);
     size_t obj_memory = sizeof(*this);
 
-    return b_memory + obj_memory;
+    return b_memory + bitmap_memory + obj_memory;
   }
 
 #ifdef HASHMAP_COLLECT_META_INFO
@@ -670,6 +688,7 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
   uint64_t num_buckets_;  // = 1 + (max_elements / fingerprints_per_bucket);
 
   alignas(utils::cacheline_size) std::vector<BucketT, BucketVectorAllocator> buckets_;
+  alignas(utils::cacheline_size) std::vector<uint64_t> bucket_bitmap_;
 
   alignas(utils::cacheline_size) uint64_t max_elements_;
   alignas(utils::cacheline_size) uint64_t size_;
