@@ -1,10 +1,11 @@
 #include <bit>
+#include <cmath>
 #include "csv_index.h"
 #include "hashmap/hashes/murmurhasher.hpp"
 #include "hashmap/hashes/xxhasher.hpp"
 #include "hashmap/hashmaps/bucketing_simd.hpp"
 #include "metrics.h"
-#include "simd_pdep.h"
+#include "simd_metrics.h"
 
 template <size_t N>
 using MurmurT = hashmap::hashing::MurmurHasher<std::array<uint32_t, N>, false>;
@@ -48,14 +49,6 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
         // Increments the current XY count if xy_key is already inserted on the hashtable; otherwise, inserts it with count = 1
         xy_table.increment(xy_key);
     }
-
-    // size_t actual_xy_size = xy_table.get_current_size();
-    // std::cout << "JSON_METRICS: {"
-    //       << "\"num_rows\":" << num_rows << ","
-    //       << "\"est_card\":" << est_xy_card << ","
-    //       << "\"actual_card\":" << actual_xy_size << ","
-    //       << "\"error_pct\":" << (std::abs(static_cast<double>(est_xy_card) - actual_xy_size) / actual_xy_size * 100.0)
-    //       << "}" << std::endl;
 
     // Couting X and Y from XY
     // X or Y will have sizes at max equal to xy_table.size()
@@ -186,4 +179,6 @@ Results compute_metrics(const ColumnarData& data, const FDSpec& fd, const std::s
         case 10: return dispatch_hasher<10>(data, lhs_indices, rhs_idx, hash_algo, est_xy_card);
         default: std::cout << "Unsupported number of LHS columns";
     }
+
+    return Results();
 }
