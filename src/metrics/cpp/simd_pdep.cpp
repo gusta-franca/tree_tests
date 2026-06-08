@@ -3,6 +3,7 @@
 #include "hashmap/hashes/murmurhasher.hpp"
 #include "hashmap/hashes/xxhasher.hpp"
 #include "hashmap/hashmaps/bucketing_simd.hpp"
+#include "metrics.h"
 #include "simd_pdep.h"
 
 template <size_t N>
@@ -12,12 +13,12 @@ template <size_t N>
 using XXHashT = hashmap::hashing::XXHasher<std::array<uint32_t, N>, false>;
 
 template <size_t N, typename HasherX, typename HasherY, typename HasherXY>
-PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx, size_t est_xy_card) {
+Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx, size_t est_xy_card) {
     std::chrono::duration<double> total_build_time(0);
     std::chrono::duration<double> total_compute_time(0);
     size_t peak_memory_b = 0;
     
-    PdepResult result = {0.0, 0.0, 0.0, 0.0};
+    Results result = {0.0, 0.0, 0.0, 0.0, 0.0};
 
     auto build_start = std::chrono::steady_clock::now();
 
@@ -57,7 +58,7 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
     //       << "}" << std::endl;
 
     // Couting X and Y from XY
-    // X or Y card will be at max. xy_table.size()
+    // X or Y will have sizes at max equal to xy_table.size()
     uint64_t max_size = std::bit_ceil(xy_table.get_current_size());
     hashmap::hashmaps::BucketingSIMDHashTable<XKey, uint32_t, HasherX> x_table(max_size, 0);
     hashmap::hashmaps::BucketingSIMDHashTable<YKey, uint32_t, HasherY> y_table(max_size, 0);
@@ -79,55 +80,68 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
 
     peak_memory_b = x_table.get_memory_usage() + y_table.get_memory_usage() + xy_table.get_memory_usage();
 
-    // Compute mu plus
     auto compute_start = std::chrono::steady_clock::now();
     
-    double global_sum = 0.0;
+    // Compute XY measures
+    double pdep_XY = 0.0;
+    double shannon_XY = 0.0;
+    
     XKey x_key;
-
-    // Compute pdep_XY
     xy_table.each([&](const auto& kv_pair) {
         const XYKey& xy_key = kv_pair.first;
         uint32_t xy_count = kv_pair.second;
 
         std::copy(xy_key.begin(), xy_key.begin() + N, x_key.begin());
 
-        uint32_t x_count = x_table.lookup(x_key);
+        uint32_t x_count = x_table.lookup(x_key);        
 
-        global_sum += (static_cast<double>(xy_count) * xy_count) / x_count;
+        pdep_XY += (static_cast<double>(xy_count) * xy_count) / x_count;
+        shannon_XY += xy_count * std::log2(static_cast<double>(xy_count) / x_count);
     });
 
-    double pdep_XY = global_sum / static_cast<double>(num_rows);
+    pdep_XY = pdep_XY / static_cast<double>(num_rows);
+    shannon_XY = -1.0 * (shannon_XY / num_rows);
+   
+    // Auxiliary vectors needed for RFI
+    std::vector<uint32_t> x_counts;
+    std::vector<uint32_t> y_counts;
+    x_counts.reserve(x_table.get_current_size());
+    y_counts.reserve(y_table.get_current_size());
     
-    // Compute pdep Y
+    x_table.each([&](const auto& kv_pair) {
+        x_counts.push_back(kv_pair.second);
+    });
+
+    // Compute Y measures
     double pdep_Y = 0.0;
+    double shannon_Y = 0.0;
 
     y_table.each([&](const auto& kv_pair) {
-        double count = static_cast<double>(kv_pair.second);
-        pdep_Y += (count * count);
+        double y_count = static_cast<double>(kv_pair.second);
+
+        pdep_Y += (y_count * y_count);
+        shannon_Y += y_count * std::log2(static_cast<double>(y_count) / num_rows);
+
+        y_counts.push_back(kv_pair.second);
     });
 
-    pdep_Y /= static_cast<double>(num_rows) * num_rows;
+    pdep_Y = pdep_Y / (static_cast<double>(num_rows) * num_rows);
+    shannon_Y = -1.0 * (shannon_Y / num_rows);
 
     size_t dom_x_size = x_table.get_current_size();
-    double mu = 0.0;
+
+    //// don't forget to also register the measures in the results, not just the final metrics.
+    //// test implementation with disjoint metric computations and this one
     
-    if (num_rows == dom_x_size) {
-        mu = 1.0;
-    }
-    else {
-        double numerator = 1.0 - pdep_XY;
-        double denominator = 1.0 - pdep_Y;
-        double factor = static_cast<double>(num_rows - 1) / 
-                       static_cast<double>(num_rows - dom_x_size);
-        
-        mu = 1.0 - (numerator / denominator) * factor;
-    }
+    // Compute metrics
+    double mu = mu_plus(num_rows, dom_x_size, pdep_XY, pdep_Y);
+    double rfi = rfi_prime_plus(num_rows, x_counts, y_counts, shannon_XY, shannon_Y);
     
     auto compute_end = std::chrono::steady_clock::now();
     total_compute_time += (compute_end - compute_start);    
     
-    result.metric_value = std::max(0.0, mu);
+    result.mu_plus = mu;
+    result.rfi_prime_plus = rfi;
     result.build_time_s = total_build_time.count();
     result.compute_time_s = total_compute_time.count();
     result.memory_used_mb = peak_memory_b / (1024.0 * 1024.0);
@@ -136,20 +150,20 @@ PdepResult execute_simd(const ColumnarData& data, const std::vector<size_t>& lhs
 }
 
 template <size_t N>
-PdepResult dispatch_hasher(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx, const std::string& hash_algo, size_t est_xy_card) {
+Results dispatch_hasher(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx, const std::string& hash_algo, size_t est_xy_card) {
      
     if (hash_algo == "murmur") {
-        return execute_simd<N, MurmurT<N>, MurmurT<1>, MurmurT<N+1>>(data, lhs_indices, rhs_idx, est_xy_card);
+        return execute<N, MurmurT<N>, MurmurT<1>, MurmurT<N+1>>(data, lhs_indices, rhs_idx, est_xy_card);
     }
 
     else if (hash_algo == "xxhash") {
-        return execute_simd<N, XXHashT<N>, XXHashT<1>, XXHashT<N+1>>(data, lhs_indices, rhs_idx, est_xy_card);
+        return execute<N, XXHashT<N>, XXHashT<1>, XXHashT<N+1>>(data, lhs_indices, rhs_idx, est_xy_card);
     }
 
-    return execute_simd<N, MurmurT<N>, MurmurT<1>, MurmurT<N+1>>(data, lhs_indices, rhs_idx, est_xy_card);
+    return execute<N, MurmurT<N>, MurmurT<1>, MurmurT<N+1>>(data, lhs_indices, rhs_idx, est_xy_card);
 }
 
-PdepResult compute_pdep(const ColumnarData& data, const FDSpec& fd, const std::string& hash_algo, size_t est_xy_card) {
+Results compute_metrics(const ColumnarData& data, const FDSpec& fd, const std::string& hash_algo, size_t est_xy_card) {
     
     // Resolve LHS columns
 	std::vector<size_t> lhs_indices;

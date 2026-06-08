@@ -41,9 +41,10 @@ int main(int argc, char* argv[]) {
 
     std::cout << est_xy_card << std::endl;
 
-    PdepResult result = compute_pdep(data, fd, algo, est_xy_card);
+    Results result = compute_metrics(data, fd, algo, est_xy_card);
 
-    std::cout << result.metric_value << "," 
+    std::cout << result.mu_plus << "," 
+              << result.rfi_prime_plus << "," 
               << result.build_time_s << "," 
               << result.compute_time_s << "," 
               << result.memory_used_mb << std::endl;
