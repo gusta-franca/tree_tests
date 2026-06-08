@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Tuple
 
 from src.metrics.python.adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
 from src.metrics.python.mu_plus_opt import mu_plus_opt, cpp_mu_plus_opt
-# from src.metrics.python.rfi_plus_opt import reliable_fraction_of_information_prime_plus_opt
+from src.metrics.python.cpp_metrics import cpp_metrics
 from src.benchmark.plot import plot_rank_frequency
 from src.generator.generator import generate_SYN 
 
@@ -87,7 +87,7 @@ def prepare_datasets(scenarios: List[Dict[str, Any]], regenerate: bool = False):
             df = generate_SYN(gen_args)
             
             df.to_csv(dataset_path, index = False)
-            print(f"Save dataset to {dataset_path}")
+            print(f"Saved dataset on {dataset_path}")
             
         log_metadata(dataset_path, scenario)
 
@@ -142,12 +142,15 @@ def run_python_metric(metric_func, df, lhs, rhs):
 def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
     
     metrics_config = [
-        {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
-        {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
-        {"name": "cpp_mu_plus_auto", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_opt_test"},
-        {"name": "cpp_mu_plus_partitioned", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_partitioned_test"},
-        {"name": "cpp_mu_plus_simd_murmur", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
-        {"name": "cpp_mu_plus_simd_xxhash", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
+        # {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
+        # {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
+        # {"name": "cpp_mu_plus_auto", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_opt_test"},
+        # {"name": "cpp_mu_plus_partitioned", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_partitioned_test"},
+        # {"name": "cpp_mu_plus_simd_murmur", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
+        # {"name": "cpp_mu_plus_simd_xxhash", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
+        # {"name": "py_rfi_prime_plus", "function": reliable_fraction_of_information_prime_plus, "is_cpp": False},
+        {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
+        {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
         # {
         #     "name": "cpp_mu_plus_bitmap",
         #     "function": cpp_mu_plus_opt,
@@ -163,13 +166,6 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         #     "lhs": lhs_columns, 
         #     "rhs": "rhs",
         #     "algo": "hash"
-        # },
-        # {
-        #     "name": "rfi_prime_plus",
-        #     "function": reliable_fraction_of_information_prime_plus,
-        #     "language": "python",
-        #     "lhs": lhs_columns, 
-        #     "rhs": "rhs",
         # },
     ]
     
@@ -193,7 +189,8 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
                     filepath = datapath, 
                     lhs = lhs_columns, 
                     rhs = rhs_column,
-                    binary_name = config["binary_name"]
+                    binary_name = config["binary_name"],
+                    algo = config["algo"]
                 )
             else:
                 stats = run_python_metric(
@@ -203,16 +200,25 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
                     rhs = rhs_column
                 )
                 
-            result_value = round(stats["result_value"], 5)
             build_time = round(stats.get("build_time_s", 0.0), 5)
             compute_time = round(stats["compute_time_s"], 5)
             total_time = round(load_time + build_time + compute_time, 5)
             memory_used = round(stats["memory_used_mb"], 5)
+
+            mu = stats.get("mu_plus")
+            rfi = stats.get("rfi_prime_plus")
+
+            if "result_value" in stats:
+                if "mu_plus" in config["name"]:
+                    mu = stats["result_value"]
+                elif "rfi" in config["name"]:
+                    rfi = stats["result_value"]
                                         
             results.append({
                 "scenario": scenario["name"],
                 "implementation": config["name"],
-                "result_value": result_value,
+                "mu_plus": round(mu, 5) if mu is not None else None,
+                "rfi_prime_plus": round(rfi, 5) if rfi is not None else None,
                 "load_time_s": round(load_time, 5),
                 "build_time_s": build_time,
                 "compute_time_s": compute_time,
