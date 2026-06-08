@@ -275,7 +275,7 @@ template <
     hashing::FingerprintBucketBits fingerprint_bucket_bits = hashing::FingerprintBucketBits::MSBLSB, FingerprintT invalid_fingerprint = 0>
 class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
  public:
-  BucketingSIMDHashTable(uint64_t max_elements, uint8_t /*target_load_factor*/, bool print_info = true,
+  BucketingSIMDHashTable(uint64_t max_elements, uint8_t /*target_load_factor*/,
                          std::string base_identifier = "BucketingSIMDHashTable")
       : num_buckets_{std::max((max_elements / fingerprints_per_bucket), static_cast<uint64_t>(1))},
         buckets_(num_buckets_, BucketT(invalid_fingerprint)),
@@ -288,14 +288,6 @@ class BucketingSIMDHashTable : public HashTable<KeyT, ValueT> {
            std::to_string(fingerprints_per_bucket) + " fingerprints per bucket require " + 
            std::to_string(fingerprints_per_bucket * sizeof(FingerprintT) * 8) + " bit vector registers, simd size is given as " + 
            std::to_string(simd_size) + " though!");
-
-    // if (print_info) {
-    //   spdlog::info(
-    //       "Initialized " + std::to_string(get_identifier()) + " with utils::cacheline_size = " + 
-    //       std::to_string(utils::cacheline_size) + ", sizeof(EntryT) = XX, num_buckets = " + 
-    //       std::to_string(num_buckets_) + ", alignof(EntryT) = XX, simd_size = " + std::to_string(simd_size) + 
-    //       ", vector_alignment_func = " + std::to_string(SIMDH::_vector_alignment()) + ".");
-    // }
 
     ASSERT(utils::is_power_of_two(max_elements) && utils::is_power_of_two(fingerprints_per_bucket),
            "Bucketing is optimized towards hash maps that have a maximum size which is a power of two, "

@@ -1,37 +1,7 @@
 # Makefile for CSV Index with Roaring Bitmaps (GCC version)
 
 CXX = g++
-CXXFLAGS = -std=c++20 -Wall -Wextra -O3 -march=native -DHASHMAP_IS_X86 -DIS_LINUX -DNDEBUG -Isrc/metrics/cpp -Iinclude -Iinclude/hashmap
-
-# TARGET = build/bin/csv_indexer
-# SRCS = main.cpp csv_index.cpp roaring.c
-# _OBJS = $(SRCS:.cpp=.o)
-# _OBJS := $(_OBJS:.c=.o)
-# OBJS = $(addprefix build/obj/, $(_OBJS))
-
-TEST_TARGET = build/bin/test_index_equivalence
-TEST_SRCS = test_index_equivalence.cpp csv_index.cpp roaring.c
-_TEST_OBJS = $(TEST_SRCS:.cpp=.o)
-_TEST_OBJS := $(_TEST_OBJS:.c=.o)
-TEST_OBJS = $(addprefix build/obj/, $(_TEST_OBJS))
-
-FD_TARGET = build/bin/fd_check
-FD_SRCS = fd_main.cpp fd_checker.cpp csv_index.cpp roaring.c
-_FD_OBJS = $(FD_SRCS:.cpp=.o)
-_FD_OBJS := $(_FD_OBJS:.c=.o)
-FD_OBJS = $(addprefix build/obj/, $(_FD_OBJS))
-
-FD_FILE_TARGET = build/bin/fd_file_check
-FD_FILE_SRCS = fd_file_check.cpp fd_checker.cpp csv_index.cpp roaring.c
-_FD_FILE_OBJS = $(FD_FILE_SRCS:.cpp=.o)
-_FD_FILE_OBJS := $(_FD_FILE_OBJS:.c=.o)
-FD_FILE_OBJS = $(addprefix build/obj/, $(_FD_FILE_OBJS))
-
-FD_INPUT_TARGET = build/bin/fd_input_test
-FD_INPUT_SRCS = fd_input_test.cpp fd_input.cpp csv_index.cpp roaring.c
-_FD_INPUT_OBJS = $(FD_INPUT_SRCS:.cpp=.o)
-_FD_INPUT_OBJS := $(_FD_INPUT_OBJS:.c=.o)
-FD_INPUT_OBJS = $(addprefix build/obj/, $(_FD_INPUT_OBJS))
+CXXFLAGS = -std=c++20 -Wall -Wextra -O3 -march=native -DHASHMAP_IS_X86 -DIS_LINUX -DNDEBUG -Isrc/metrics/cpp -Iinclude -Iinclude/hashmap -Wno-interference-size
 
 FD_CHECKER_TEST_TARGET = build/bin/fd_checker_test
 FD_CHECKER_TEST_SRCS = fd_checker_test.cpp fd_checker.cpp prefix_tree_fd_checker.cpp fd_input.cpp csv_index.cpp roaring.c
@@ -58,50 +28,17 @@ _FD_METRICS_PARTITIONED_TEST_OBJS := $(_FD_METRICS_PARTITIONED_TEST_OBJS:.c=.o)
 FD_METRICS_PARTITIONED_TEST_OBJS = $(addprefix build/obj/, $(_FD_METRICS_PARTITIONED_TEST_OBJS))
 
 BUCKETING_SIMD_TEST_TARGET = build/bin/bucketing_simd_test
-BUCKETING_SIMD_TEST_SRCS = bucketing_simd_test.cpp simd_pdep.cpp utils.cpp fd_input.cpp csv_index.cpp roaring.c 
+BUCKETING_SIMD_TEST_SRCS = bucketing_simd_test.cpp simd_metrics.cpp metrics.cpp utils.cpp fd_input.cpp csv_index.cpp roaring.c 
 _BUCKETING_SIMD_TEST_OBJS = $(BUCKETING_SIMD_TEST_SRCS:.cpp=.o)
 _BUCKETING_SIMD_TEST_OBJS := $(_BUCKETING_SIMD_TEST_OBJS:.c=.o)
 BUCKETING_SIMD_TEST_OBJS = $(addprefix build/obj/, $(_BUCKETING_SIMD_TEST_OBJS))
 
-.PHONY: all clean run setup directories fd_input fd_checker_test fd_metrics_test fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test
+ANKERL_TEST_TARGET = build/bin/ankerl_test
+ANKERL_TEST_SRCS = ankerl_test.cpp ankerl_metrics.cpp metrics.cpp utils.cpp fd_input.cpp csv_index.cpp roaring.c 
+_ANKERL_TEST_OBJS = $(ANKERL_TEST_SRCS:.cpp=.o)
+_ANKERL_TEST_OBJS := $(_ANKERL_TEST_OBJS:.c=.o)
+ANKERL_TEST_OBJS = $(addprefix build/obj/, $(_ANKERL_TEST_OBJS))
 
-directories:
-	@mkdir -p build/obj
-	@mkdir -p build/bin
-
-setup: directories
-	@./setup_deps.sh
-
-all: setup fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test
-
-test: setup $(TEST_TARGET)
-
-fd_input: setup $(FD_INPUT_TARGET)
-
-fd_checker_test: setup $(FD_CHECKER_TEST_TARGET)
-
-fd_metrics_test: setup $(FD_METRICS_TEST_TARGET)
-
-fd_metrics_opt_test: setup $(FD_METRICS_OPT_TEST_TARGET)
-
-fd_metrics_partitioned_test: setup $(FD_METRICS_PARTITIONED_TEST_TARGET)
-
-bucketing_simd_test: setup $(BUCKETING_SIMD_TEST_TARGET)
-
-# $(TARGET): $(OBJS)
-# 	$(CXX) $(CXXFLAGS) $^ -o $@
-
-$(TEST_TARGET): $(TEST_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-$(FD_TARGET): $(FD_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-$(FD_FILE_TARGET): $(FD_FILE_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-$(FD_INPUT_TARGET): $(FD_INPUT_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(FD_CHECKER_TEST_TARGET): $(FD_CHECKER_TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -118,14 +55,43 @@ $(FD_METRICS_PARTITIONED_TEST_TARGET): $(FD_METRICS_PARTITIONED_TEST_OBJS)
 $(BUCKETING_SIMD_TEST_TARGET): $(BUCKETING_SIMD_TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+$(ANKERL_TEST_TARGET): $(ANKERL_TEST_OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+
+.PHONY: all clean run setup directories fd_checker_test fd_metrics_test fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test ankerl_test
+
+fd_checker_test: setup $(FD_CHECKER_TEST_TARGET)
+
+fd_metrics_test: setup $(FD_METRICS_TEST_TARGET)
+
+fd_metrics_opt_test: setup $(FD_METRICS_OPT_TEST_TARGET)
+
+fd_metrics_partitioned_test: setup $(FD_METRICS_PARTITIONED_TEST_TARGET)
+
+bucketing_simd_test: setup $(BUCKETING_SIMD_TEST_TARGET)
+
+ankerl_test: setup $(ANKERL_TEST_TARGET)
+
+
 build/obj/%.o: src/metrics/cpp/%.cpp | directories
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 build/obj/%.o: src/metrics/cpp/%.c | directories
 	$(CC) -O3 -std=c11 -c $< -o $@
 
-# run: $(TARGET)
-# 	./$(TARGET) data/test_int.csv
+
+directories:
+	@mkdir -p build/obj
+	@mkdir -p build/bin
+
+setup: directories
+	@./setup_deps.sh
+
+all: setup fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test ankerl_test
+
+run: 
+	@python3 main.py
 
 clean:
 	rm -rf build/
