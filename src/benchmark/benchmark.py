@@ -7,7 +7,7 @@ import tracemalloc
 from typing import Any, Callable, Dict, List, Tuple
 
 from src.metrics.python.adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
-from src.metrics.python.mu_plus_opt import mu_plus_opt, cpp_mu_plus_opt
+from src.metrics.python.mu_plus_opt import mu_plus_opt
 from src.metrics.python.cpp_metrics import cpp_metrics
 from src.benchmark.plot import plot_rank_frequency
 from src.generator.generator import generate_SYN 
@@ -154,7 +154,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         # {"name": "cpp_mu_plus_simd_murmur", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
         # {"name": "cpp_mu_plus_simd_xxhash", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
         # {"name": "py_rfi_prime_plus", "function": reliable_fraction_of_information_prime_plus, "is_cpp": False},
-        # {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
+        {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
         {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
         {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
         # {
