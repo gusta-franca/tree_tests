@@ -47,12 +47,14 @@ int main(int argc, char* argv[]) {
 
     Results result = compute_metrics(data, fd, algo, est_xy_card);
 
-    std::cout << result.mu_plus << "," 
-              << result.rfi_prime_plus << "," 
-              << load_time_s.count() << ","
-              << result.build_time_s << "," 
-              << result.compute_time_s << "," 
-              << result.memory_used_mb << std::endl;
+    std::cout << "RESULT_JSON: {"
+            << "\"mu_plus\": " << result.mu_plus << ", "
+            << "\"rfi_prime_plus\": " << result.rfi_prime_plus << ", "
+            << "\"load_time_s\": " << load_time_s.count() << ", "
+            << "\"build_time_s\": " << result.build_time_s << ", "
+            << "\"compute_time_s\": " << result.compute_time_s << ", "
+            << "\"memory_used_mb\": " << result.memory_used_mb
+            << "}" << std::endl;
 
     return 0;
 }
