@@ -131,7 +131,6 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
     return true;
 }
 
-// TODO: COMPUTE TIME TAKEN TO BUILD ONE HLL FOR EACH ATTRIBUTE
 bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FDSpec& fd, size_t& est_xy_card, bool verbose) {
     // std::chrono::duration<double> hll_build_time(0);
     // std::chrono::duration<double> hll_est_time(0);    
@@ -208,52 +207,32 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
          
         size_t col_idx = 0;
         
-        while (std::getline(row_ss, cell, ',') && col_idx < num_cols) {
-            uint32_t value = 0;
-            try {
-                value = std::stoul(cell);
-            } catch (...) {
-                value = 0;
-            }
-            data.columns[col_idx].push_back(value);
-            current_row[col_idx] = value;
-
-            // Measure time taken to build individual sketches
-            auto col_hll_start = clock::now();
-            uint64_t hash = XXH3_64bits(&current_row[col_idx], sizeof(uint32_t));
-            hll_col[col_idx].add(hash);
-            hll_col_time += (clock::now() - col_hll_start);
-
-            ++col_idx;
-        }
-        
         // operate direclty in the char buffer inside getline
         // if found the separator (in this case, a comma) and the separator points to a bigger address than buf, stores buf's content into value (std::from_chars())
         // write the value on data.columns and current_row in the current col_idx
         // make buf point to the next address after separator
 
-        // size_t col_idx = 0;
-        // const char* buf = line.data();
-        // const char* len = buf + line.size();
+        size_t col_idx = 0;
+        const char* buf = line.data();
+        const char* len = buf + line.size();
         
-        // while (buf < len && col_idx < num_cols) {
-        //     const char* separator = buf;
-        //     while (separator < len && *separator != ',') {
-        //         ++separator;
-        //     }
+        while (buf < len && col_idx < num_cols) {
+            const char* separator = buf;
+            while (separator < len && *separator != ',') {
+                ++separator;
+            }
             
-        //     uint32_t value = 0;
-        //     if (separator > buf) {
-                   // converts string to interge
-        //         std::from_chars(buf, separator, value);
-        //     }
+            uint32_t value = 0;
+            if (separator > buf) {
+                std::from_chars(buf, separator, value);
+            }
             
-        //     data.columns[col_idx].push_back(value);
-        //     current_row[col_idx] = value;
-        //     ++col_idx;
+            data.columns[col_idx].push_back(value);
+            current_row[col_idx] = value;
+            ++col_idx;
             
-        //     buf = separator + 1;
-        // }
+            buf = separator + 1;
+        }
         
         // Pad short rows
         while (col_idx < num_cols) {
