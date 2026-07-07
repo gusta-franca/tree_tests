@@ -201,15 +201,36 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
                     lhs = lhs_columns, 
                     rhs = rhs_column
                 )
+
+            if config["is_cpp"]:
+                mu_time = round(stats.get("mu_time_s", 0.0), 5)
+                rfi_time = round(stats.get("rfi_time_s", 0.0), 5)
+                compute_time = round(stats.get("compute_time_s", 0.0), 5) # Total shared compute time
+            else:
+                if "mu_plus" in config["name"]:
+                    mu_time = round(stats["compute_time_s"], 5)
+                    rfi_time = 0.0
+                elif "rfi" in config["name"]:
+                    mu_time = 0.0
+                    rfi_time = round(stats["compute_time_s"], 5)
+                else:
+                    mu_time = 0.0
+                    rfi_time = 0.0
+                compute_time = round(stats["compute_time_s"], 5)
                 
             load_time = round(stats["load_time_s"], 5)
             build_time = round(stats["build_time_s"], 5)
-            compute_time = round(stats["compute_time_s"], 5)
             total_time = round(load_time + build_time + compute_time, 5)
             memory_used = round(stats["memory_used_mb"], 5)
 
             mu = stats.get("mu_plus")
             rfi = stats.get("rfi_prime_plus")
+
+            if "result_value" in stats:
+                if "mu_plus" in config["name"]:
+                    mu = stats["result_value"]
+                elif "rfi" in config["name"]:
+                    rfi = stats["result_value"]
 
             if "result_value" in stats:
                 if "mu_plus" in config["name"]:
@@ -222,13 +243,15 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
                 "implementation": config["name"],
                 "mu_plus": round(mu, 5) if mu is not None else None,
                 "rfi_prime_plus": round(rfi, 5) if rfi is not None else None,
-                "load_time_s": round(load_time, 5),
+                "load_time_s": load_time,
                 "build_time_s": build_time,
-                "compute_time_s": compute_time,
+                "mu_time_s": mu_time,                 # <--- NEW
+                "rfi_time_s": rfi_time,               # <--- NEW
+                "total_compute_time_s": compute_time, # <--- RENAMED
                 "total_time_s": total_time,
                 "memory_used_mb": memory_used,
             })
-        
+            
     save_results(results)
     
     return results

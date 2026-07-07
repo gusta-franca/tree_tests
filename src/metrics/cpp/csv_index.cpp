@@ -131,6 +131,7 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
     return true;
 }
 
+// TODO: COMPUTE TIME TAKEN TO BUILD ONE HLL FOR EACH ATTRIBUTE
 bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FDSpec& fd, size_t& est_xy_card, bool verbose) {
     // std::chrono::duration<double> hll_build_time(0);
     // std::chrono::duration<double> hll_est_time(0);    
@@ -204,8 +205,6 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
 
         row_ss.clear();
         row_ss.str(line);
-         
-        size_t col_idx = 0;
         
         // operate direclty in the char buffer inside getline
         // if found the separator (in this case, a comma) and the separator points to a bigger address than buf, stores buf's content into value (std::from_chars())

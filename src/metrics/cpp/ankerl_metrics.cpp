@@ -23,7 +23,7 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
     std::chrono::duration<double> total_compute_time(0);
     size_t peak_memory_b = 0;
     
-    Results result = {0.0, 0.0, 0.0, 0.0, 0.0};
+    Results result = {};
 
     auto build_start = std::chrono::steady_clock::now();
 
@@ -127,17 +127,29 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
     //// don't forget to also register the measures in the results, not just the final metrics.
     //// test implementation with disjoint metric computations and this one
     
-    // Compute metrics
-    double mu = mu_plus(num_rows, dom_x_size, pdep_XY, pdep_Y);
-    double rfi = rfi_prime_plus(num_rows, x_counts, y_counts, shannon_XY, shannon_Y);
-    
     auto compute_end = std::chrono::steady_clock::now();
-    total_compute_time += (compute_end - compute_start);    
+        
+    // Compute metrics
+    auto mu_start = std::chrono::steady_clock::now();
+    double mu = mu_plus(num_rows, dom_x_size, pdep_XY, pdep_Y);
+    auto mu_end = std::chrono::steady_clock::now();
+
+    std::chrono::duration<double> mu_time = (mu_end - mu_start);
+    
+    auto rfi_start = std::chrono::steady_clock::now();
+    double rfi = rfi_prime_plus(num_rows, x_counts, y_counts, shannon_XY, shannon_Y);
+    auto rfi_end = std::chrono::steady_clock::now();
+
+    std::chrono::duration<double> rfi_time = (rfi_end - rfi_start);
+    
+    total_compute_time += (compute_end - compute_start) + mu_time + rfi_time;    
     
     result.mu_plus = mu;
     result.rfi_prime_plus = rfi;
     result.build_time_s = total_build_time.count();
     result.compute_time_s = total_compute_time.count();
+    result.mu_compute_time_s = mu_time.count();
+    result.rfi_compute_time_s = rfi_time.count();
     result.memory_used_mb = peak_memory_b / (1024.0 * 1024.0);
 
     return result;
