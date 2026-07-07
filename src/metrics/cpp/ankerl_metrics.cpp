@@ -76,8 +76,15 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
     // The map/set has two data structures:
     // * `std::vector<value_type>` which holds all data. map/set iterators are just `std::vector<value_type>::iterator`!
     // * An indexing structure (bucket array), which is a flat array with 8-byte buckets.
-    // MISSING ARRAY MEMORY USAGE, NO IDEA ON HOW TO GET THEM
-    peak_memory_b = (xy_table.bucket_count() + x_table.bucket_count() + y_table.bucket_count()) * 8;
+    size_t bucket_memory = (xy_table.bucket_count() + x_table.bucket_count() + y_table.bucket_count()) * 8;
+    
+    // Instead of typing the entire type, it is used decltype
+    size_t vector_memory = (xy_table.values().capacity() * sizeof(typename decltype(xy_table)::value_type)) +
+                       (x_table.values().capacity()  * sizeof(typename decltype(x_table)::value_type)) +
+                       (y_table.values().capacity()  * sizeof(typename decltype(y_table)::value_type));
+    size_t object_memory = sizeof(xy_table) + sizeof(x_table) + sizeof(y_table);
+    
+    peak_memory_b += bucket_memory + vector_memory + object_memory;
 
     auto compute_start = std::chrono::steady_clock::now();
     
