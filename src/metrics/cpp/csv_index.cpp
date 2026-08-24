@@ -77,17 +77,21 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
         data.column_names.push_back(col_name);
     }
     
-    data.columns.resize(data.column_names.size());
+    size_t num_cols = data.column_names.size();
+    data.columns.resize(num_cols);    
     
-    if (verbose) {
-        std::cout << "Columns: ";
-        for (size_t i = 0; i < data.column_names.size(); ++i) {
-            std::cout << data.column_names[i];
-            if (i + 1 < data.column_names.size()) std::cout << ", ";
-        }
-        std::cout << std::endl;
-    }
+    // if (verbose) {
+    //     std::cout << "Columns: ";
+    //     for (size_t i = 0; i < data.column_names.size(); ++i) {
+    //         std::cout << data.column_names[i];
+    //         if (i + 1 < data.column_names.size()) std::cout << ", ";
+    //     }
+    //     std::cout << std::endl;
+    // }
     
+    // Dicts used for encoding strings into integers. There is one dict per column
+    std::vector<ankerl::unordered_dense::map<std::string, uint32_t>> dictionaries(num_cols);
+
     // Parse data rows
     std::string line;
     size_t row_count = 0;
@@ -100,18 +104,38 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
         
         while (std::getline(row_ss, cell, ',') && col_idx < data.columns.size()) {
             uint32_t value = 0;
-            try {
-                value = std::stoul(cell);
-            } catch (...) {
-                value = 0;
+
+            if (cell.empty()) {
+                value = ColumnarData::NULL_VALUE;
+            } 
+            else {
+                auto& dict = dictionaries[col_idx];
+                auto kv_pair = dict.find(cell);
+
+                if (kv_pair != dict.end()) {
+                    value = kv_pair->second;
+                } 
+                else {
+                    value = static_cast<uint32_t>(dict.size());
+                    dict.emplace(cell, value);
+                }
             }
+
             data.columns[col_idx].push_back(value);
             ++col_idx;
+
+            // try {
+            //     value = std::stoul(cell);
+            // } catch (...) {
+            //     value = 0;
+            // }
+            // data.columns[col_idx].push_back(value);
+            // ++col_idx;
         }
         
         // Pad short rows
         while (col_idx < data.columns.size()) {
-            data.columns[col_idx].push_back(0);
+            data.columns[col_idx].push_back(ColumnarData::NULL_VALUE);
             ++col_idx;
         }
         
@@ -131,7 +155,6 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
     return true;
 }
 
-// TODO: COMPUTE TIME TAKEN TO BUILD ONE HLL FOR EACH ATTRIBUTE
 bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FDSpec& fd, size_t& est_xy_card, bool verbose) {
     // std::chrono::duration<double> hll_build_time(0);
     // std::chrono::duration<double> hll_est_time(0);    
@@ -184,18 +207,18 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
     }
     
     // auto hll_build_start = clock::now();
+
     // fd_row = every attribute in the FD; current_row = every attribute in a row
     // Right now, fd_row == current_row at all times 
     size_t lhs_size = lhs_indices.size();
     std::vector<uint32_t> fd_row(lhs_size + 1);
     std::vector<uint32_t> current_row(num_cols);    
     std::stringstream row_ss;
-    std::string cell;
 
     hll::HyperLogLog hll_xy(14);                                                // HLL used for estimating XY cardinality
-    std::vector<hll::HyperLogLog> hll_col(num_cols, hll::HyperLogLog(14));     // Vector with every attribute's HLL
-    std::chrono::duration<double> hll_xy_time(0);
-    std::chrono::duration<double> hll_col_time(0);
+    // std::vector<hll::HyperLogLog> hll_col(num_cols, hll::HyperLogLog(14));     // Vector with every attribute's HLL
+    // std::chrono::duration<double> hll_xy_time(0);
+    // std::chrono::duration<double> hll_col_time(0);
     
     // Parse data rows
     std::string line;
@@ -239,16 +262,18 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
             current_row[col_idx] = 0;
 
             // Measure time taken to build individual sketches
-            auto col_hll_start = clock::now();
+            // auto col_hll_start = clock::now();
+
             uint64_t hash = XXH3_64bits(&current_row[col_idx], sizeof(uint32_t));
-            hll_col[col_idx].add(hash);
-            hll_col_time += (clock::now() - col_hll_start);
+            
+            // hll_col[col_idx].add(hash);
+            // hll_col_time += (clock::now() - col_hll_start);
 
             ++col_idx;
         }
 
         // Hash and add to HLL
-        auto col_hll_start = clock::now();
+        // auto col_hll_start = clock::now();
         for (size_t i = 0; i < lhs_size; i++) {
             fd_row[i] = current_row[lhs_indices[i]];
         }
@@ -256,7 +281,8 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
         
         uint64_t hash = XXH3_64bits(fd_row.data(), fd_row.size()*sizeof(uint32_t));
         hll_xy.add(hash);
-        hll_xy_time += (clock::now() - col_hll_start);
+
+        // hll_xy_time += (clock::now() - col_hll_start);
         
         ++row_count;
     }
@@ -279,10 +305,10 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
         std::cout << "No indexes built - pure columnar storage" << std::endl;
     }
 
-    std::cout << "HLL_JSON: {"
-              << "\"hll_col_time_s\": " << hll_col_time.count() << ", "
-              << "\"hll_xy_time_s\": " << hll_xy_time.count()
-              << "}" << std::endl;
+    // std::cout << "HLL_JSON: {"
+    //           << "\"hll_col_time_s\": " << hll_col_time.count() << ", "
+    //           << "\"hll_xy_time_s\": " << hll_xy_time.count()
+    //           << "}" << std::endl;
     
     return true;
 }
@@ -546,4 +572,3 @@ void ColumnIndex::print_cooccurrences() const {
 // --- Sorting & Output ---
 
 const std::vector<std::vector<uint32_t>>& CSVIndex::values() const { return column_values; }
-

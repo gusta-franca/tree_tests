@@ -21,6 +21,9 @@ struct ColumnarData {
     
     size_t get_column_index(const std::string& name) const;
     size_t get_distinct_count(size_t col_idx) const;
+
+    // !! verify alternatives for handling null values
+    static const uint32_t NULL_VALUE = UINT32_MAX;
 };
 
 struct FDSpec;
