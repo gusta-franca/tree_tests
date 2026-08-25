@@ -1,14 +1,19 @@
 import sys
 
-from src.benchmark.benchmark import prepare_datasets, run_benchmarks
+from src.benchmark.benchmark import prepare_datasets, run_benchmarks, run_fd_ground_truth_benchmark
 
 
 def main():
     regenerate = "regenerate" in sys.argv
-    
-    prepare_datasets(scenarios, regenerate)
 
-    run_benchmarks(scenarios)   
+    if "fd" in sys.argv:
+        data_type = "dirty_data" if "dirty" in sys.argv else "clean_data"
+        run_fd_ground_truth_benchmark(data_type = data_type)
+
+    else:
+        prepare_datasets(scenarios, regenerate)
+
+        run_benchmarks(scenarios)   
 
 
 scenarios = [

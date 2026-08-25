@@ -1,7 +1,8 @@
 # Makefile for CSV Index with Roaring Bitmaps (GCC version)
 
 CXX = g++
-CXXFLAGS = -std=c++20 -Wall -Wextra -O3 -march=native -DHASHMAP_IS_X86 -DIS_LINUX -DNDEBUG -Isrc/metrics/cpp -Iinclude -Iinclude/hashmap -Wno-interference-size
+CXXFLAGS = -std=c++20 -Wall -Wextra -O3 -march=native -DHASHMAP_IS_X86 -DIS_LINUX -DNDEBUG -Isrc/metrics/cpp -Iinclude -Iinclude/hashmap -fopenmp -Wno-interference-size
+LDFLAGS = -fopenmp
 
 FD_CHECKER_TEST_TARGET = build/bin/fd_checker_test
 FD_CHECKER_TEST_SRCS = fd_checker_test.cpp fd_checker.cpp prefix_tree_fd_checker.cpp fd_input.cpp csv_index.cpp roaring.c
@@ -39,27 +40,36 @@ _ANKERL_TEST_OBJS = $(ANKERL_TEST_SRCS:.cpp=.o)
 _ANKERL_TEST_OBJS := $(_ANKERL_TEST_OBJS:.c=.o)
 ANKERL_TEST_OBJS = $(addprefix build/obj/, $(_ANKERL_TEST_OBJS))
 
+AUTO_RELATE_TEST_TARGET = build/bin/auto_relate_test
+AUTO_RELATE_TEST_SRCS = auto_relate_test.cpp auto_relate.cpp metrics.cpp utils.cpp fd_input.cpp csv_index.cpp roaring.c 
+_AUTO_RELATE_TEST_OBJS = $(AUTO_RELATE_TEST_SRCS:.cpp=.o)
+_AUTO_RELATE_TEST_OBJS := $(_AUTO_RELATE_TEST_OBJS:.c=.o)
+AUTO_RELATE_TEST_OBJS = $(addprefix build/obj/, $(_AUTO_RELATE_TEST_OBJS))
+
 
 $(FD_CHECKER_TEST_TARGET): $(FD_CHECKER_TEST_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(FD_METRICS_TEST_TARGET): $(FD_METRICS_TEST_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(FD_METRICS_OPT_TEST_TARGET): $(FD_METRICS_OPT_TEST_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(FD_METRICS_PARTITIONED_TEST_TARGET): $(FD_METRICS_PARTITIONED_TEST_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(BUCKETING_SIMD_TEST_TARGET): $(BUCKETING_SIMD_TEST_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(ANKERL_TEST_TARGET): $(ANKERL_TEST_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+
+$(AUTO_RELATE_TEST_TARGET): $(AUTO_RELATE_TEST_OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 
-.PHONY: all clean run setup directories fd_checker_test fd_metrics_test fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test ankerl_test
+.PHONY: all clean run setup directories fd_checker_test fd_metrics_test fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test ankerl_test auto_relate_test
 
 fd_checker_test: setup $(FD_CHECKER_TEST_TARGET)
 
@@ -72,6 +82,8 @@ fd_metrics_partitioned_test: setup $(FD_METRICS_PARTITIONED_TEST_TARGET)
 bucketing_simd_test: setup $(BUCKETING_SIMD_TEST_TARGET)
 
 ankerl_test: setup $(ANKERL_TEST_TARGET)
+
+auto_relate_test: setup $(AUTO_RELATE_TEST_TARGET)
 
 
 build/obj/%.o: src/metrics/cpp/%.cpp | directories
@@ -88,7 +100,7 @@ directories:
 setup: directories
 	@./setup_deps.sh
 
-all: setup fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test ankerl_test
+all: setup fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test ankerl_test auto_relate_test
 
 run: 
 	@python3 main.py

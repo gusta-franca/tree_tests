@@ -1,14 +1,13 @@
 from datetime import datetime
 import os
 import pandas as pd
-import subprocess
 import time
 import tracemalloc
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from src.metrics.python.adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
 from src.metrics.python.mu_plus_opt import mu_plus_opt
-from src.metrics.python.cpp_metrics import cpp_metrics
+from src.metrics.python.cpp_metrics import cpp_metrics, cpp_auto_relate
 from src.benchmark.plot import plot_rank_frequency
 from src.generator.generator import generate_SYN 
 
@@ -106,13 +105,12 @@ def load_dataset(filepath: str) -> pd.DataFrame:
     return pd.read_csv(filepath)
     
 
-def save_results(results: List[Dict[str, Any]]):
-    
+def save_results(results, prefix: str = "benchmark"):    
     results_dir = "results"
     os.makedirs(results_dir, exist_ok = True)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"benchmark_{timestamp}.csv"
+    filename = f"{prefix}_{timestamp}.csv"
     filepath = os.path.join(results_dir, filename)
     
     df = pd.DataFrame(results)
@@ -147,16 +145,17 @@ def run_python_metric(metric_func, csv_filepath, lhs, rhs):
 def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
     
     metrics_config = [
-        {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
-        {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
+        # {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
+        # {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
         # {"name": "cpp_mu_plus_auto", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_opt_test"},
         # {"name": "cpp_mu_plus_partitioned", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_partitioned_test"},
         # {"name": "cpp_mu_plus_simd_murmur", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
         # {"name": "cpp_mu_plus_simd_xxhash", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
         # {"name": "py_rfi_prime_plus", "function": reliable_fraction_of_information_prime_plus, "is_cpp": False},
-        {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
-        {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
-        {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
+        # {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
+        # {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
+        # {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
+        {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "clean"}
         # {
         #     "name": "cpp_mu_plus_bitmap",
         #     "function": cpp_mu_plus_opt,
@@ -187,13 +186,22 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
             print(f"Running: {scenario["name"]}, {config["name"]}.\n")
             
             if config["is_cpp"]:
-                stats = config["function"](
-                    csv_filepath = datapath, 
-                    lhs = lhs_columns, 
-                    rhs = rhs_column,
-                    binary_name = config["binary_name"],
-                    algo = config["algo"]
-                )
+                if config["function"] is cpp_auto_relate:
+                    stats = config["function"](
+                        csv_filepath = datapath, 
+                        lhs = lhs_columns[0], 
+                        rhs = rhs_column,
+                        binary_name = config["binary_name"],
+                        mode = config["mode"]
+                    )
+                else:
+                    stats = config["function"](
+                        csv_filepath = datapath, 
+                        lhs = lhs_columns, 
+                        rhs = rhs_column,
+                        binary_name = config["binary_name"],
+                        algo = config.get("algo", "auto"),
+                    )
             else:
                 stats = run_python_metric(
                     metric_func = config["function"], 
@@ -205,7 +213,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
             if config["is_cpp"]:
                 mu_time = round(stats.get("mu_time_s", 0.0), 5)
                 rfi_time = round(stats.get("rfi_time_s", 0.0), 5)
-                compute_time = round(stats.get("compute_time_s", 0.0), 5) # Total shared compute time
+                compute_time = round(stats.get("compute_time_s", 0.0), 5)
             else:
                 if "mu_plus" in config["name"]:
                     mu_time = round(stats["compute_time_s"], 5)
@@ -221,7 +229,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
             load_time = round(stats["load_time_s"], 5)
             build_time = round(stats["build_time_s"], 5)
             total_time = round(load_time + build_time + compute_time, 5)
-            memory_used = round(stats["memory_used_mb"], 5)
+            memory_used = round(stats.get("memory_used_mb", 0), 5)
 
             mu = stats.get("mu_plus")
             rfi = stats.get("rfi_prime_plus")
@@ -237,17 +245,26 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
                     mu = stats["result_value"]
                 elif "rfi" in config["name"]:
                     rfi = stats["result_value"]
-                                        
+
+            score = stats.get("score")
+            is_reliable = stats.get("is_reliable")
+            violation_count = stats.get("violation_count")
+            violation_rate = stats.get("violation_rate")
+            
             results.append({
                 "scenario": scenario["name"],
                 "implementation": config["name"],
                 "mu_plus": round(mu, 5) if mu is not None else None,
                 "rfi_prime_plus": round(rfi, 5) if rfi is not None else None,
+                "score": round(score, 5) if score is not None else None,
+                "is_reliable": is_reliable,
+                "violation_count": violation_count,
+                "violation_rate": round(violation_rate, 5) if violation_rate is not None else None,
                 "load_time_s": load_time,
                 "build_time_s": build_time,
-                "mu_time_s": mu_time,                 # <--- NEW
-                "rfi_time_s": rfi_time,               # <--- NEW
-                "total_compute_time_s": compute_time, # <--- RENAMED
+                "mu_time_s": mu_time,
+                "rfi_time_s": rfi_time,
+                "total_compute_time_s": compute_time,
                 "total_time_s": total_time,
                 "memory_used_mb": memory_used,
             })
@@ -255,3 +272,71 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
     save_results(results)
     
     return results
+
+# see if I can reuse this function to run the other algorithms with data/FD/ datasets
+def run_fd_ground_truth_benchmark(
+    fd_filepath: str = "data/FD",
+    data_type: str = "clean_data",
+    binary_name: str = "auto_relate_test",
+) -> pd.DataFrame:
+
+    if data_type not in ("clean_data", "dirty_data"):
+        print(f"Enter a valid data_type, not {data_type}")
+        return
+ 
+    filename = "clean_data.csv" if data_type == "clean_data" else "dirty_data_mix_0.1.csv"
+    mode = "clean" if data_type == "clean_data" else "dirty"
+ 
+    case_ids = sorted(case_id for case_id in 
+                      os.listdir(fd_filepath) if os.path.isdir(os.path.join(fd_filepath, case_id))
+    )
+
+    rows = []
+ 
+    for case_id in case_ids:
+        case_dir = os.path.join(fd_filepath, case_id)
+        filepath = os.path.join(case_dir, filename)
+        gt_path = os.path.join(case_dir, "ground_truth.csv")
+ 
+        if not os.path.exists(filepath) or not os.path.exists(gt_path):
+            print(f"Skipping {case_id} for missing {filename} or ground_truth.csv")
+            continue
+ 
+        gt_df = pd.read_csv(gt_path)
+  
+        for _, candidate in gt_df.iterrows():
+            left_col = candidate["left_col"]
+            right_col = candidate["right_col"]
+            sample_type = candidate["sample_type"]
+ 
+            stats = cpp_auto_relate(
+                csv_filepath = filepath,
+                lhs = left_col,
+                rhs = right_col,
+                binary_name = binary_name,
+                mode = mode,
+            )
+ 
+            if not stats:
+                print(f"no result for {case_id}: {left_col} -> {right_col}")
+                continue
+ 
+            rows.append({
+                "case_id": case_id,
+                "left_col": left_col,
+                "right_col": right_col,
+                "sample_type": sample_type,
+                "score": stats.get("score"),
+                "is_reliable": stats.get("is_reliable"),
+                "violation_count": stats.get("violation_count"),
+                "violation_rate": stats.get("violation_rate"),
+                "load_time_s": stats.get("load_time_s"),
+                "build_time_s": stats.get("build_time_s"),
+                "compute_time_s": stats.get("compute_time_s"),
+            })
+ 
+    results_df = pd.DataFrame(rows)
+ 
+    save_results(results_df, prefix = f"fd_ground_truth_{data_type}")
+ 
+    return results_df
