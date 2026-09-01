@@ -155,7 +155,8 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         # {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
         # {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
         # {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
-        {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "clean"}
+        {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "clean"},
+        {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "dirty"}
         # {
         #     "name": "cpp_mu_plus_bitmap",
         #     "function": cpp_mu_plus_opt,
@@ -183,7 +184,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         rhs_column = "rhs"
         
         for config in metrics_config:            
-            print(f"Running: {scenario["name"]}, {config["name"]}.\n")
+            print(f"\n Running: {scenario["name"]}, {config["name"]}, {config["mode"]}.\n")
             
             if config["is_cpp"]:
                 if config["function"] is cpp_auto_relate:
@@ -273,7 +274,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
     
     return results
 
-# see if I can reuse this function to run the other algorithms with data/FD/ datasets
+# see if I can resue this function to run the other algorithms with data/FD/ datasets
 def run_fd_ground_truth_benchmark(
     fd_filepath: str = "data/FD",
     data_type: str = "clean_data",
@@ -327,6 +328,9 @@ def run_fd_ground_truth_benchmark(
                 "right_col": right_col,
                 "sample_type": sample_type,
                 "score": stats.get("score"),
+                "independence_pvalue": stats.get("independence_pvalue"),
+                "independence_used": stats.get("independence_used"),
+                "independence_rejected": stats.get("independence_rejected"),
                 "is_reliable": stats.get("is_reliable"),
                 "violation_count": stats.get("violation_count"),
                 "violation_rate": stats.get("violation_rate"),
@@ -338,5 +342,28 @@ def run_fd_ground_truth_benchmark(
     results_df = pd.DataFrame(rows)
  
     save_results(results_df, prefix = f"fd_ground_truth_{data_type}")
+    print_fd_ground_truth_metrics(results_df, threshold = 0.5)
  
     return results_df
+ 
+def print_fd_ground_truth_metrics(results_df: pd.DataFrame, threshold: float = 0.5):
+    if results_df.empty:
+        print("no results")
+        return
+ 
+    scored = results_df.dropna(subset = ["score"])
+ 
+    predicted = scored["score"] <= threshold
+    real = scored["sample_type"] == "P"
+ 
+    tp = int((predicted & real).sum())
+    fp = int((predicted & ~real).sum())
+    fn = int((~predicted & real).sum())
+ 
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+ 
+    print(f"\nAuto-Relate metrics (theshold = {threshold})")
+    print(f"Candidates scored: {len(scored)} / {len(results_df)}")
+    print(f"TP = {tp}, FP = {fp}, FN = {fn}")
