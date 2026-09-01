@@ -27,10 +27,14 @@ struct AutoRelateFDResult {
     size_t violation_count = 0;
     double violation_rate = 0.0;
 
+    double independence_pvalue = -1.0;
+    bool independence_used = false;
+    bool independence_rejected = false;
+
     bool is_reliable = false;
 
     double build_time_s = 0.0;   // accuracy test?
-    double compute_time_s = 0.0; // independence test + score?
+    double compute_time_s = 0.0; // independence test + stability score?
 };
 
 // compute Auto-Relate's FD reliability score for one candidate (only FDs in the format left_col -> right_col)

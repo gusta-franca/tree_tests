@@ -7,6 +7,7 @@
 
 #include "auto_relate.h"
 #include "ankerl/unordered_dense.h"
+#include "chi2_fast.hpp"
 
 // struct to hold a group's values and it's counting
 struct GroupValues {
@@ -26,6 +27,63 @@ struct GroupValues {
         counts.push_back(1);
     }
 };
+
+double independence_pvalue(const ColumnarData& data,
+                           const size_t& col_idx, 
+                           const std::vector<bool>& is_violation, 
+                           size_t n) {
+    const auto& column = data.columns[col_idx];
+    
+    // // chi2_fast.h and mostly degrees of freedom need the exact cardinality?
+    // size_t card = data.get_distinct_count(col_idx);
+
+    uint32_t max_value = 0;
+    bool no_values_found = true;
+
+    for (size_t i = 0; i < n; i++) {
+        uint32_t value = column[i];
+
+        if (value == ColumnarData::NULL_VALUE) continue;
+
+        if (value > max_value) max_value = value;
+
+        no_values_found = false;
+    }
+
+    if (no_values_found) {
+        return 1.0;
+    }
+
+    const size_t card = static_cast<size_t>(max_value) + 1;
+
+    // no point in computing for card == 0 and card == 1
+    if (card < 2) {
+        return 1.0;
+    }
+
+    std::vector<uint32_t> holds(card, 0);
+    std::vector<uint32_t> violates(card, 0);
+
+   
+ 
+    for (size_t i = 0; i < n; i++) {
+        uint32_t value = column[i];
+ 
+        if (value == ColumnarData::NULL_VALUE) continue;
+ 
+        if (is_violation[i]) {
+            violates[value]++;
+        } 
+        else {
+            holds[value]++;
+        }
+    }
+
+    // essencially chi2_contingency()
+    chi2fast::Result res = chi2fast::chi2_2xN(holds.data(), violates.data(), card);
+
+    return res.pvalue;
+}
 
 
 AutoRelateFDResult compute_auto_relate_fd(
@@ -56,6 +114,7 @@ AutoRelateFDResult compute_auto_relate_fd(
 
     // !!find violations
     /// Will be substituted by the xy and x maps
+    /// ALso adapt every use of left_* later to support multiple LHS columns
     ankerl::unordered_dense::map<uint32_t, std::vector<uint32_t>> groups_rows;
 
     /// group by left values
@@ -113,12 +172,42 @@ AutoRelateFDResult compute_auto_relate_fd(
     auto compute_start = clock::now();
     
     // !!independence test 
-    
-    /// look up scipy's chi-square implementation 
-    /// boost and other libraries have chi-square implementations, search for them
-    
+    if (config.use_independence_test && violation_count > 0) {
+        result.independence_used = true;
+
+        if (result.violation_rate > config.violation_rate_threshold) {
+            result.independence_rejected = true;
+            result.score = 1.0;
+            result.is_reliable = false;
+
+            auto compute_end = clock::now();
+            result.compute_time_s = std::chrono::duration<double>(compute_end - compute_start).count();
+
+            return result;
+        }
+        
+        // applies the independence test for every column not in the FD
+        for (size_t c = 0; c < data.columns.size(); c++) {
+            if (c == left_idx || c == right_idx) continue;
+
+            double pvalue = independence_pvalue(data, c, is_violation, n);
+            result.independence_pvalue = pvalue;
+
+            if (pvalue < config.significance_threshold) {
+                result.independence_rejected = true;
+                result.score = 1.0;
+                result.is_reliable = false;
+
+                auto compute_end = clock::now();
+                result.compute_time_s = std::chrono::duration<double>(compute_end - compute_start).count();
+
+                return result;
+            }
+
+        }
+    }
+
     // !!stability score
-    
     /// drop violating rows and rows with NULL; group surviving k/v pairs and count them (fd_dict_gen)
     ankerl::unordered_dense::map<uint32_t, GroupValues> groups;
     
@@ -137,7 +226,7 @@ AutoRelateFDResult compute_auto_relate_fd(
         groups[left_value].count_values(right_value);
     }
 
-    /// perturbation test (HT1_FD; score = 1-HT1_FD())
+    /// perturbation test (HT1_FD; score = 1 - HT1_FD())
     ankerl::unordered_dense::map<uint32_t, uint64_t> value_freq;
 
     uint64_t left_value_count = 0;
