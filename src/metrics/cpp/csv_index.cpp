@@ -1,44 +1,22 @@
 // csv_index.cpp
 
-#include <fstream>
-#include <sstream>
-#include <iostream>
-#include <stdexcept>
 #include <chrono>
 #include <future>
-#include <thread>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <stdexcept>
 #include <sys/resource.h>
+#include <thread>
+
 #define XXH_INLINE_ALL 1
+
 #include "csv.h"
+#include "csv.hpp"
 #include "csv_index.h"
 #include "fd_input.h"
 #include "hyperloglog.hpp"
 #include "xxhash.h"
-
-void split_csv_line(char* line, std::vector<std::string>& fields) {
-    using QuoteEscape = io::double_quote_escape<',', '"'>;
-
-    fields.clear();
-
-    while (line != nullptr) {
-        char* col_begin;
-        char* col_end;
-
-        io::detail::chop_next_column<QuoteEscape>(line, col_begin, col_end);
-        QuoteEscape::unescape(col_begin, col_end);
-        fields.emplace_back(col_begin, col_end);
-    }
-}
-
-// fallback in case of quoting errors in a row, like a non closed "
-void split_csv_line(const std::string& line, std::vector<std::string>& fields) {
-    fields.clear();
-    std::stringstream ss(line);
-    std::string cell;
-    while (std::getline(ss, cell, ',')) {
-        fields.push_back(cell);
-    }
-}
 
 // -- ColumnarData Implementationm ---
 
@@ -78,30 +56,17 @@ size_t ColumnarData::get_distinct_count(size_t col_idx) const {
 bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool verbose) {
     using clock = std::chrono::steady_clock;
     auto t_start = clock::now();
-    
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Error: Cannot open file: " << filename << std::endl;
-        return false;
-    }
-    
-    // Parse header
-    std::string header_line;
-    if (!std::getline(file, header_line)) {
-        std::cerr << "Error: Empty file" << std::endl;
-        return false;
-    }
-    
-    std::stringstream ss(header_line);
-    std::string col_name;
-    while (std::getline(ss, col_name, ',')) {
-        // Trim whitespace
-        size_t start = col_name.find_first_not_of(" \t\r\n");
-        size_t end = col_name.find_last_not_of(" \t\r\n");
-        if (start != std::string::npos) {
-            col_name = col_name.substr(start, end - start + 1);
-        }
+
+    csv::CSVReader reader(filename);
+
+    for (auto& col_name : reader.get_col_names()) {
         data.column_names.push_back(col_name);
+    }
+
+    if (data.column_names.empty()) {
+        std::cerr << "Error: Empty file or no columns found in file: " << filename << std::endl;
+        
+        return false;
     }
     
     size_t num_cols = data.column_names.size();
@@ -116,30 +81,20 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
     //     std::cout << std::endl;
     // }
     
+    
+    // Parse data rows
     // Dicts used for encoding strings into integers. There is one dict per column
     std::vector<ankerl::unordered_dense::map<std::string, uint32_t>> dictionaries(num_cols);
-
-    // Parse data rows
-    std::string line;
-    std::vector<std::string> row_fields;
     size_t row_count = 0;
-    while (std::getline(file, line)) {
-        if (line.empty()) continue;
 
-        // tries to parse the current line; tries to recover from quoting errors by falling back to splitting by comma
-        try {
-            split_csv_line(line.data(), row_fields);
-        } catch (const io::error::base& e) {
-            split_csv_line(line, row_fields);
-        }
-        
-        // std::stringstream row_ss(line);
-        std::string cell;
+    for (auto& row : reader) {
         size_t col_idx = 0;
-        
-        for (; col_idx < row_fields.size() && col_idx < data.columns.size(); col_idx++) {
+        size_t valid_cols = std::min(row.size(), num_cols);
+
+        while (col_idx < valid_cols) {
+            std::string cell = row[col_idx].get<std::string>();
             uint32_t value = 0;
-            cell =  row_fields[col_idx];
+
             auto& dict = dictionaries[col_idx];
             auto kv_pair = dict.find(cell);
 
@@ -151,41 +106,17 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
                 dict.emplace(cell, value);
             }
 
-            // if (cell.empty()) {
-            //     value = ColumnarData::NULL_VALUE;
-            // } 
-            // else {
-                // auto& dict = dictionaries[col_idx];
-                // auto kv_pair = dict.find(cell);
-
-                // if (kv_pair != dict.end()) {
-                //     value = kv_pair->second;
-                // } 
-                // else {
-                //     value = static_cast<uint32_t>(dict.size());
-                //     dict.emplace(cell, value);
-                // }
-            // }
-
             data.columns[col_idx].push_back(value);
-            // ++col_idx;
-
-            // try {
-            //     value = std::stoul(cell);
-            // } catch (...) {
-            //     value = 0;
-            // }
-            // data.columns[col_idx].push_back(value);
-            // ++col_idx;
+            col_idx++;
         }
-        
-        // Pad short rows
+
+        // NULL_VALUE for padding short rows, marking them as actually missing values
         while (col_idx < data.columns.size()) {
             data.columns[col_idx].push_back(ColumnarData::NULL_VALUE);
-            ++col_idx;
+            col_idx++;
         }
         
-        ++row_count;
+        row_count++;
     }
     
     data.num_rows = row_count;
