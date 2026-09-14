@@ -15,6 +15,31 @@
 #include "hyperloglog.hpp"
 #include "xxhash.h"
 
+void split_csv_line(char* line, std::vector<std::string>& fields) {
+    using QuoteEscape = io::double_quote_escape<',', '"'>;
+
+    fields.clear();
+
+    while (line != nullptr) {
+        char* col_begin;
+        char* col_end;
+
+        io::detail::chop_next_column<QuoteEscape>(line, col_begin, col_end);
+        QuoteEscape::unescape(col_begin, col_end);
+        fields.emplace_back(col_begin, col_end);
+    }
+}
+
+// fallback in case of quoting errors in a row, like a non closed "
+void split_csv_line(const std::string& line, std::vector<std::string>& fields) {
+    fields.clear();
+    std::stringstream ss(line);
+    std::string cell;
+    while (std::getline(ss, cell, ',')) {
+        fields.push_back(cell);
+    }
+}
+
 // -- ColumnarData Implementationm ---
 
 size_t ColumnarData::get_column_index(const std::string& name) const {
@@ -35,6 +60,8 @@ size_t ColumnarData::get_distinct_count(size_t col_idx) const {
     // Compute on-demand using a set
     ankerl::unordered_dense::set<uint32_t> unique_vals;
     for (uint32_t val : columns[col_idx]) {
+        // if (val == ColumnarData::NULL_VALUE) continue;
+
         unique_vals.insert(val);
     }
     
@@ -94,35 +121,54 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
 
     // Parse data rows
     std::string line;
+    std::vector<std::string> row_fields;
     size_t row_count = 0;
     while (std::getline(file, line)) {
         if (line.empty()) continue;
+
+        // tries to parse the current line; tries to recover from quoting errors by falling back to splitting by comma
+        try {
+            split_csv_line(line.data(), row_fields);
+        } catch (const io::error::base& e) {
+            split_csv_line(line, row_fields);
+        }
         
-        std::stringstream row_ss(line);
+        // std::stringstream row_ss(line);
         std::string cell;
         size_t col_idx = 0;
         
-        while (std::getline(row_ss, cell, ',') && col_idx < data.columns.size()) {
+        for (; col_idx < row_fields.size() && col_idx < data.columns.size(); col_idx++) {
             uint32_t value = 0;
+            cell =  row_fields[col_idx];
+            auto& dict = dictionaries[col_idx];
+            auto kv_pair = dict.find(cell);
 
-            if (cell.empty()) {
-                value = ColumnarData::NULL_VALUE;
+            if (kv_pair != dict.end()) {
+                value = kv_pair->second;
             } 
             else {
-                auto& dict = dictionaries[col_idx];
-                auto kv_pair = dict.find(cell);
-
-                if (kv_pair != dict.end()) {
-                    value = kv_pair->second;
-                } 
-                else {
-                    value = static_cast<uint32_t>(dict.size());
-                    dict.emplace(cell, value);
-                }
+                value = static_cast<uint32_t>(dict.size());
+                dict.emplace(cell, value);
             }
 
+            // if (cell.empty()) {
+            //     value = ColumnarData::NULL_VALUE;
+            // } 
+            // else {
+                // auto& dict = dictionaries[col_idx];
+                // auto kv_pair = dict.find(cell);
+
+                // if (kv_pair != dict.end()) {
+                //     value = kv_pair->second;
+                // } 
+                // else {
+                //     value = static_cast<uint32_t>(dict.size());
+                //     dict.emplace(cell, value);
+                // }
+            // }
+
             data.columns[col_idx].push_back(value);
-            ++col_idx;
+            // ++col_idx;
 
             // try {
             //     value = std::stoul(cell);
@@ -143,18 +189,19 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
     }
     
     data.num_rows = row_count;
-    
+
     auto t_end = clock::now();
     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
     
-    if (verbose) {
-        std::cout << "Loaded " << row_count << " rows in " << elapsed_ms << " ms" << std::endl;
-        std::cout << "No indexes built - pure columnar storage" << std::endl;
-    }
+    // if (verbose) {
+    //     std::cout << "Loaded " << row_count << " rows in " << elapsed_ms << " ms" << std::endl;
+    //     std::cout << "No indexes built - pure columnar storage" << std::endl;
+    // }
     
     return true;
 }
 
+// need adapting so it can be used to compute auto-relate (i.e. dict encoding)
 bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FDSpec& fd, size_t& est_xy_card, bool verbose) {
     // std::chrono::duration<double> hll_build_time(0);
     // std::chrono::duration<double> hll_est_time(0);    
@@ -264,7 +311,7 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
             // Measure time taken to build individual sketches
             // auto col_hll_start = clock::now();
 
-            uint64_t hash = XXH3_64bits(&current_row[col_idx], sizeof(uint32_t));
+            // uint64_t hash = XXH3_64bits(&current_row[col_idx], sizeof(uint32_t));
             
             // hll_col[col_idx].add(hash);
             // hll_col_time += (clock::now() - col_hll_start);
