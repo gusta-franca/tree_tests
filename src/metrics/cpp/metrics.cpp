@@ -5,6 +5,8 @@
 #include <vector>
 #include "metrics.h"
 
+// "opt" means the counting is made considering the data structures used for counting values in the ankerl/simd implementations;
+// the other implementations are the closest 1:1 implementation from python
 double mu_plus(size_t num_rows, size_t dom_x_size, double pdep_XY, double pdep_Y) {
     double mu = 0.0;
     
@@ -20,52 +22,52 @@ double mu_plus(size_t num_rows, size_t dom_x_size, double pdep_XY, double pdep_Y
     return std::max(0.0, mu);
 }
 
-double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts) {
-    int n = static_cast<int>(num_rows);
-    double m = 0.0;
+// double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts) {
+//     int n = static_cast<int>(num_rows);
+//     double m = 0.0;
 
-    for (uint32_t x_c : x_counts) {
-        int a = static_cast<int>(x_c);
+//     for (uint32_t x_c : x_counts) {
+//         int a = static_cast<int>(x_c);
         
-        double log_comb_n_a = std::lgamma(n+1) - std::lgamma(a+1) - std::lgamma(n-a+1);
+//         double log_comb_n_a = std::lgamma(n+1) - std::lgamma(a+1) - std::lgamma(n-a+1);
 
-        for (uint32_t y_c : y_counts) {
-            int b = static_cast<int>(y_c);
+//         for (uint32_t y_c : y_counts) {
+//             int b = static_cast<int>(y_c);
 
-            int k0 = std::max(0, a + b - n);
-            int k_max = std::min(a, b);
+//             int k0 = std::max(0, a + b - n);
+//             int k_max = std::min(a, b);
 
-            double log_p0 = (std::lgamma(b + 1) - std::lgamma(k0 + 1) - std::lgamma(b - k0 + 1))
-                          + (std::lgamma(n - b + 1) - std::lgamma(a - k0 + 1) - std::lgamma(n - a - b + k0 + 1))
-                          - log_comb_n_a;
+//             double log_p0 = (std::lgamma(b + 1) - std::lgamma(k0 + 1) - std::lgamma(b - k0 + 1))
+//                           + (std::lgamma(n - b + 1) - std::lgamma(a - k0 + 1) - std::lgamma(n - a - b + k0 + 1))
+//                           - log_comb_n_a;
             
-            double p0 = std::exp(log_p0);
-            double e_mi = 0.0; // mi for just one 'a' and 'b' pair
+//             double p0 = std::exp(log_p0);
+//             double e_mi = 0.0; // mi for just one 'a' and 'b' pair
 
-            if (k0 != 0) {
-                double k0_d = static_cast<double>(k0);
-                e_mi += p0 * (k0_d / n) * std::log2((k0_d * n) / (static_cast<double>(a) * b));
-            }
+//             if (k0 != 0) {
+//                 double k0_d = static_cast<double>(k0);
+//                 e_mi += p0 * (k0_d / n) * std::log2((k0_d * n) / (static_cast<double>(a) * b));
+//             }
 
-            for (int k1 = k0 + 1; k1 <= k_max; k1++) {
-                double k0_d = static_cast<double>(k0);
-                double k1_d = static_cast<double>(k1);
+//             for (int k1 = k0 + 1; k1 <= k_max; k1++) {
+//                 double k0_d = static_cast<double>(k0);
+//                 double k1_d = static_cast<double>(k1);
 
-                p0 *= ((static_cast<double>(a) - k0_d) * (static_cast<double>(b) - k0_d)) / 
-                      (k1_d * (static_cast<double>(n) - a - b + k1_d));
+//                 p0 *= ((static_cast<double>(a) - k0_d) * (static_cast<double>(b) - k0_d)) / 
+//                       (k1_d * (static_cast<double>(n) - a - b + k1_d));
                 
-                e_mi += p0 * (k1_d / n) * std::log2((k1_d * n) / (static_cast<double>(a) * b));
-                k0 = k1;
-            }
+//                 e_mi += p0 * (k1_d / n) * std::log2((k1_d * n) / (static_cast<double>(a) * b));
+//                 k0 = k1;
+//             }
 
-            m += e_mi;
-        }
-    }
+//             m += e_mi;
+//         }
+//     }
 
-    return m;
-}
+//     return m;
+// }
 
-double expected_mi_opt(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts) {
+double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts) {
     int n = static_cast<int>(num_rows);
     double m = 0.0;
 
@@ -146,11 +148,12 @@ double expected_mi_opt(size_t num_rows, const std::vector<uint32_t>& x_counts, c
     return m;
 }
 
+
 double rfi_prime_plus(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts, double shannon_XY, double shannon_Y) {
     double rfi_prime = 0.0;
 
     double mi = shannon_Y - shannon_XY;
-    double e_mi = expected_mi_opt(num_rows, x_counts, y_counts);
+    double e_mi = expected_mi(num_rows, x_counts, y_counts);
 
     if (shannon_Y > e_mi) { 
         rfi_prime = (mi-e_mi) / (shannon_Y-e_mi);
