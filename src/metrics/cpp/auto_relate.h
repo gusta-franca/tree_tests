@@ -4,6 +4,8 @@
 #include "csv_index.h"
 
 struct AutoRelateFDConfig {
+    bool dirty_data = true;
+    
     // independence test by default due to default mode being dirty
     bool use_independence_test = true;
 
@@ -42,4 +44,5 @@ AutoRelateFDResult compute_auto_relate_fd(
     const ColumnarData& data,
     const std::string& left_col,
     const std::string& right_col,
+    const std::vector<int>& violation_rows,
     const AutoRelateFDConfig& config = AutoRelateFDConfig());

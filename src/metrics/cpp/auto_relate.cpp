@@ -9,7 +9,7 @@
 #include "ankerl/unordered_dense.h"
 #include "chi2_fast.hpp"
 
-// struct to hold a group's values and it's counting
+// struct to hold a group's values and their countings
 struct GroupValues {
     std::vector<uint32_t> distinct_values;
     std::vector<uint64_t> counts;
@@ -34,29 +34,10 @@ double independence_pvalue(const ColumnarData& data,
                            size_t n) {
     const auto& column = data.columns[col_idx];
     
-    // // chi2_fast.h and mostly degrees of freedom need the exact cardinality?
-    // size_t card = data.get_distinct_count(col_idx);
+    // chi2_fast.h and mostly degrees of freedom need the exact cardinality?
+    size_t card = data.get_distinct_count(col_idx);
 
-    uint32_t max_value = 0;
-    bool no_values_found = true;
-
-    for (size_t i = 0; i < n; i++) {
-        uint32_t value = column[i];
-
-        if (value == ColumnarData::NULL_VALUE) continue;
-
-        if (value > max_value) max_value = value;
-
-        no_values_found = false;
-    }
-
-    if (no_values_found) {
-        return 1.0;
-    }
-
-    const size_t card = static_cast<size_t>(max_value) + 1;
-
-    // no point in computing for card == 0 and card == 1
+    // no point in computing for columns with less than 2 unique values
     if (card < 2) {
         return 1.0;
     }
@@ -64,7 +45,8 @@ double independence_pvalue(const ColumnarData& data,
     std::vector<uint32_t> holds(card, 0);
     std::vector<uint32_t> violates(card, 0);
 
-   
+    uint64_t holds_total = 0;
+    uint64_t violates_total = 0;
  
     for (size_t i = 0; i < n; i++) {
         uint32_t value = column[i];
@@ -73,13 +55,20 @@ double independence_pvalue(const ColumnarData& data,
  
         if (is_violation[i]) {
             violates[value]++;
+            violates_total++;
         } 
         else {
             holds[value]++;
+            holds_total++;
         }
     }
 
-    // essencially chi2_contingency()
+    if (holds_total == 0 || violates_total == 0) {
+        return 1.0;
+    }
+
+    // analogue to scipy's chi2_contingency()
+    /// needs more validation, some 
     chi2fast::Result res = chi2fast::chi2_2xN(holds.data(), violates.data(), card);
 
     return res.pvalue;
@@ -90,6 +79,7 @@ AutoRelateFDResult compute_auto_relate_fd(
     const ColumnarData& data,
     const std::string& left_col,
     const std::string& right_col,
+    const std::vector<int>& violation_rows,
     const AutoRelateFDConfig& config) {
 
     using clock = std::chrono::steady_clock;
@@ -103,64 +93,66 @@ AutoRelateFDResult compute_auto_relate_fd(
 
     if (left_idx == SIZE_MAX || right_idx == SIZE_MAX) {
         result.score = 1.0;
+        
         return result;
     }
 
     const auto& left_data = data.columns[left_idx];
     const auto& right_data = data.columns[right_idx];
     const size_t n = data.num_rows;
-
-    auto build_start = clock::now();
-
-    // !!find violations
-    /// Will be substituted by the xy and x maps
-    /// ALso adapt every use of left_* later to support multiple LHS columns
-    ankerl::unordered_dense::map<uint32_t, std::vector<uint32_t>> groups_rows;
-
-    /// group by left values
-    for (uint32_t i = 0; i < n; i++) {
-        uint32_t left_value = left_data[i];
-
-        if (left_value == ColumnarData::NULL_VALUE) { 
-            continue;
-        }
-
-        groups_rows[left_value].push_back(i);
-    }
-
     std::vector<bool> is_violation(n, false);
-
-    /// build value->counts map
-    for (const auto& [left_value, rows] : groups_rows) {
-        ankerl::unordered_dense::map<uint32_t, uint32_t> value_counts;
-
-        for (uint32_t row : rows) {
-            value_counts[right_data[row]]++;
-        }
-
-        uint32_t majority_value = 0;
-        uint32_t majority_count = 0;
-
-        for (const auto& [value, count] : value_counts) {
-            if (count > majority_count) {
-                majority_count = count;
-                majority_value = value;
-            }
-        }
-
-        for (uint32_t row : rows) {
-            if (right_data[row] != majority_value) {
-                is_violation[row] = true;
-            }
-        }
-    }
-
     size_t violation_count = 0;
     
-    for (bool v : is_violation) {
-        if (v) { 
-            violation_count++; 
+    auto build_start = clock::now();
+
+    if (config.dirty_data) {
+        // !!find violations
+        /// Will be substituted by the xy and x maps
+        /// ALso adapt every use of left_* later to support multiple LHS columns
+        ankerl::unordered_dense::map<uint32_t, std::vector<uint32_t>> groups_rows;
+
+        /// group by left values
+        for (uint32_t i = 0; i < n; i++) {
+            uint32_t left_value = left_data[i];
+
+            if (left_value == ColumnarData::NULL_VALUE) { 
+                continue;
+            }
+
+            groups_rows[left_value].push_back(i);
         }
+
+        /// build value->counts map
+        for (const auto& [left_value, rows] : groups_rows) {
+            ankerl::unordered_dense::map<uint32_t, uint32_t> value_counts;
+
+            for (uint32_t row : rows) {
+                value_counts[right_data[row]]++;
+            }
+
+            uint32_t majority_value = 0;
+            uint32_t majority_count = 0;
+
+            for (const auto& [value, count] : value_counts) {
+                if (count > majority_count) {
+                    majority_count = count;
+                    majority_value = value;
+                }
+            }
+
+            for (uint32_t row : rows) {
+                if (right_data[row] != majority_value) {
+                    is_violation[row] = true;
+                    violation_count++;
+                }
+            }
+        }
+    }
+    else {
+        for (int idx : violation_rows) {
+                is_violation[idx] = true;
+                violation_count++;
+            }
     }
 
     result.violation_count = violation_count;

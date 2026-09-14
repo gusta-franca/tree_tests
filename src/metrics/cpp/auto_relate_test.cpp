@@ -5,9 +5,27 @@
 #include "auto_relate.h"
 #include "csv_index.h"
 
+std::vector<int> parse_violation_rows(const std::string& rows_str) {
+    std::vector<int> rows;
+
+    if (rows_str.empty() || rows_str == "") {
+        return rows;
+    }
+
+    std::stringstream ss(rows_str);
+    std::string r;
+
+    while (std::getline(ss, r, ',')) {
+        rows.push_back(stoi(r));
+    }
+
+    return rows;
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 4) {
         std::cerr << "Usage: " << argv[0] << " <csv_file> <left_col> <right_col> <dirty|clean>" << std::endl;
+        
         return 1;
     }
 
@@ -15,9 +33,16 @@ int main(int argc, char* argv[]) {
     std::string left_col = argv[2];
     std::string right_col = argv[3];
     std::string mode = (argc > 4) ? argv[4] : "dirty";
+    
+    std::string v_rows_str;
+    std::getline(std::cin, v_rows_str);
+
+    std::vector<int> violation_rows = parse_violation_rows(v_rows_str);
 
     AutoRelateFDConfig config;
-    config.use_independence_test = (mode == "dirty");
+
+    config.dirty_data = (mode == "dirty");
+    config.use_independence_test = config.dirty_data;
 
     std::chrono::duration<double> load_time_s(0);
     auto load_start = std::chrono::steady_clock::now();
@@ -31,7 +56,7 @@ int main(int argc, char* argv[]) {
     auto load_end = std::chrono::steady_clock::now();
     load_time_s = (load_end - load_start);
 
-    AutoRelateFDResult result = compute_auto_relate_fd(data, left_col, right_col, config);
+    AutoRelateFDResult result = compute_auto_relate_fd(data, left_col, right_col, violation_rows, config);
 
     std::cout << "RESULT_JSON: {"
               << "\"left_col\": \"" << result.left_col << "\", "

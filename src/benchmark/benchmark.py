@@ -154,9 +154,9 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         # {"name": "py_rfi_prime_plus", "function": reliable_fraction_of_information_prime_plus, "is_cpp": False},
         # {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
         # {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
-        # {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
-        {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "clean"},
-        {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "dirty"}
+        {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
+        # {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "clean"},
+        # {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "dirty"}
         # {
         #     "name": "cpp_mu_plus_bitmap",
         #     "function": cpp_mu_plus_opt,
@@ -184,7 +184,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         rhs_column = "rhs"
         
         for config in metrics_config:            
-            print(f"\n Running: {scenario["name"]}, {config["name"]}, {config["mode"]}.\n")
+            print(f"\n Running: {scenario["name"]}, {config["name"]}, {config.get("mode")}.\n")
             
             if config["is_cpp"]:
                 if config["function"] is cpp_auto_relate:
@@ -227,8 +227,8 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
                     rfi_time = 0.0
                 compute_time = round(stats["compute_time_s"], 5)
                 
-            load_time = round(stats["load_time_s"], 5)
-            build_time = round(stats["build_time_s"], 5)
+            load_time = round(stats.get("load_time_s", 0), 5)
+            build_time = round(stats.get("build_time_s", 0), 5)
             total_time = round(load_time + build_time + compute_time, 5)
             memory_used = round(stats.get("memory_used_mb", 0), 5)
 
@@ -309,13 +309,15 @@ def run_fd_ground_truth_benchmark(
             left_col = candidate["left_col"]
             right_col = candidate["right_col"]
             sample_type = candidate["sample_type"]
+            violation_rows = candidate["violation_rows"]
  
             stats = cpp_auto_relate(
                 csv_filepath = filepath,
                 lhs = left_col,
                 rhs = right_col,
+                violation_rows = violation_rows,
                 binary_name = binary_name,
-                mode = mode,
+                mode = mode
             )
  
             if not stats:

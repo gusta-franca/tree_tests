@@ -29,11 +29,14 @@ def cpp_metrics(csv_filepath: str, lhs: list[str], rhs: str,  binary_name: str, 
 
     return metrics;
 
-def cpp_auto_relate(csv_filepath: str, lhs: str, rhs: str,  binary_name: str, mode: str = "dirty"):
+def cpp_auto_relate(csv_filepath: str, lhs: str, rhs: str, violation_rows: str, binary_name: str, mode: str = "dirty"):
+
+    # sending "r1,r2,r3" instead of "[r1, r2, r3]" to cpp
+    v_rows = violation_rows.strip("[]").replace(" ", "")
     
     binary_path = f"build/bin/{binary_name}" 
     cmd = [binary_path, csv_filepath, lhs, rhs, mode]
-    result = subprocess.run(cmd, capture_output = True, text = True)
+    result = subprocess.run(cmd, input = v_rows, capture_output = True, text = True)
 
     metrics = {}
 
