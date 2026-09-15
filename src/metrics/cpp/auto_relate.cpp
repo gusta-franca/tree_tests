@@ -127,14 +127,17 @@ AutoRelateFDResult compute_auto_relate_fd(
             ankerl::unordered_dense::map<uint32_t, uint32_t> value_counts;
 
             for (uint32_t row : rows) {
-                value_counts[right_data[row]]++;
+                if (right_data[row] != ColumnarData::NULL_VALUE) {
+                    value_counts[right_data[row]]++;
+                }
             }
 
-            uint32_t majority_value = 0;
+            uint32_t majority_value = UINT32_MAX;
             uint32_t majority_count = 0;
 
             for (const auto& [value, count] : value_counts) {
-                if (count > majority_count) {
+                // !!mode()[0]
+                if (count > majority_count || count == majority_count && value < majority_value) {
                     majority_count = count;
                     majority_value = value;
                 }

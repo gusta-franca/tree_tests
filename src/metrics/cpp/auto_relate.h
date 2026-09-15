@@ -9,8 +9,8 @@ struct AutoRelateFDConfig {
     // independence test by default due to default mode being dirty
     bool use_independence_test = true;
 
-    // matches the paper's default alpha = 0.05
-    double significance_threshold = 0.05;
+    // matches the original ht2_threshdhol = 0.0001
+    double significance_threshold = 0.0001;
 
     // matches the original_violation_rate check in ht_afd.py 
     double violation_rate_threshold = 0.5;
