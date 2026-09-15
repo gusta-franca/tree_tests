@@ -1,3 +1,4 @@
+import ast
 from datetime import datetime
 import os
 import pandas as pd
@@ -151,9 +152,8 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         # {"name": "cpp_mu_plus_partitioned", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_partitioned_test"},
         # {"name": "cpp_mu_plus_simd_murmur", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
         # {"name": "cpp_mu_plus_simd_xxhash", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
-        # {"name": "py_rfi_prime_plus", "function": reliable_fraction_of_information_prime_plus, "is_cpp": False},
-        # {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
-        # {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
+        {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
+        {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
         {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
         # {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "clean"},
         # {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "dirty"}
@@ -184,7 +184,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         rhs_column = "rhs"
         
         for config in metrics_config:            
-            print(f"\n Running: {scenario["name"]}, {config["name"]}, {config.get("mode")}.\n")
+            print(f"Running scenario \"{scenario["name"]}\" with \"{config["name"]}\"\n")
             
             if config["is_cpp"]:
                 if config["function"] is cpp_auto_relate:
@@ -274,6 +274,13 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
     
     return results
 
+
+def violation_rate(row_count: int, violation_rows: list, threshold: float = 0.05    ):
+    return len(violation_rows) / row_count > threshold
+    
+def numeric_type(data: pd.DataFrame, left_col: str, right_col: str) -> bool:
+    return (pd.api.types.is_numeric_dtype(data[left_col]) and pd.api.types.is_numeric_dtype(data[right_col]))
+    
 # see if I can resue this function to run the other algorithms with data/FD/ datasets
 def run_fd_ground_truth_benchmark(
     fd_filepath: str = "data/FD",
@@ -302,6 +309,9 @@ def run_fd_ground_truth_benchmark(
         if not os.path.exists(filepath) or not os.path.exists(gt_path):
             print(f"Skipping {case_id} for missing {filename} or ground_truth.csv")
             continue
+
+        # used only for early rejection, before calling the computation per se like the original
+        df = pd.read_csv(filepath)
  
         gt_df = pd.read_csv(gt_path)
   
@@ -310,6 +320,13 @@ def run_fd_ground_truth_benchmark(
             right_col = candidate["right_col"]
             sample_type = candidate["sample_type"]
             violation_rows = candidate["violation_rows"]
+
+            violation_rows_list = ast.literal_eval(violation_rows) if isinstance(violation_rows, str) else violation_rows
+
+            if (sample_type == 'N' and 
+            (violation_rate(len(df), violation_rows_list) or
+            numeric_type(df, left_col, right_col))):
+                continue
  
             stats = cpp_auto_relate(
                 csv_filepath = filepath,
