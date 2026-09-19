@@ -12,6 +12,7 @@
 struct ColumnarData {
     std::vector<std::string> column_names;
     std::vector<std::vector<uint32_t>> columns;  // column-major data
+    std::vector<ankerl::unordered_dense::map<uint32_t, std::string>> dicts;
     size_t num_rows;
     
     // Statistics computed on-demand

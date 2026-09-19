@@ -81,11 +81,12 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
     //     std::cout << std::endl;
     // }
     
-    
     // Parse data rows
-    // Dicts used for encoding strings into integers. There is one dict per column
-    std::vector<ankerl::unordered_dense::map<std::string, uint32_t>> dictionaries(num_cols);
+    // Dicts used for encoding strings into integers. There is one dict per column; only used during enconding
+    std::vector<ankerl::unordered_dense::map<std::string, uint32_t>> dicts_str_uint(num_cols);
     size_t row_count = 0;
+    
+    data.dicts.resize(num_cols);
 
     for (auto& row : reader) {
         size_t col_idx = 0;
@@ -95,7 +96,7 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
             std::string cell = row[col_idx].get<std::string>();
             uint32_t value = 0;
 
-            auto& dict = dictionaries[col_idx];
+            auto& dict = dicts_str_uint[col_idx];
             auto kv_pair = dict.find(cell);
 
             if (kv_pair != dict.end()) {
@@ -104,6 +105,7 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
             else {
                 value = static_cast<uint32_t>(dict.size());
                 dict.emplace(cell, value);
+                data.dicts[col_idx].emplace(value, cell);
             }
 
             data.columns[col_idx].push_back(value);

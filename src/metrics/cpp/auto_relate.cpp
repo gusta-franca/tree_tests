@@ -137,7 +137,8 @@ AutoRelateFDResult compute_auto_relate_fd(
 
             for (const auto& [value, count] : value_counts) {
                 // !!mode()[0]
-                if (count > majority_count || count == majority_count && value < majority_value) {
+                if (count > majority_count || 
+                    count == majority_count && data.dicts[right_idx].at(value) < data.dicts[right_idx].at(majority_value)) {
                     majority_count = count;
                     majority_value = value;
                 }
