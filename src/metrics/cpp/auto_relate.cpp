@@ -9,6 +9,9 @@
 #include "ankerl/unordered_dense.h"
 #include "chi2_fast.hpp"
 
+// used to mark a grouped lhs as null
+static constexpr uint32_t NULL_GROUP = UINT32_MAX - 1;
+
 // struct to hold a group's values and their countings
 struct GroupValues {
     std::vector<uint32_t> distinct_values;
@@ -38,6 +41,29 @@ struct IndependenceTestResult {
     bool rejected = false;
     double pvalue = -1.0;
 };
+
+static std::vector<uint32_t> build_lhs_key(const ColumnarData& data, const std::vector<size_t>& lhs_idxs) {
+    const size_t n = data.num_rows;
+    std::vector<uint32_t> lhs_group(n);
+    const auto& first = data.columns[lhs_idxs[0]];
+
+    for (size_t i = 0; i < n; i++)
+        lhs_group[i] = (first[i] == ColumnarData::NULL_VALUE) ? NULL_GROUP : first[i];
+
+    for (size_t j = 1; j < lhs_idxs.size(); j++) {
+        const auto& col = data.columns[lhs_idxs[j]];
+        ankerl::unordered_dense::map<uint64_t, uint32_t> remap;
+
+        for (size_t k = 0; k < n; k++) {
+            if (lhs_group[k] == NULL_GROUP) continue;
+            if (col[k] == ColumnarData::NULL_VALUE) { lhs_group[k] = NULL_GROUP; continue; }
+
+            uint64_t key = (uint64_t(lhs_group[k]) << 32) | col[k];
+            lhs_group[k] = remap.try_emplace(key, static_cast<uint32_t>(remap.size())).first->second;
+        }
+    }
+    return lhs_group;
+}
 
 double independence_pvalue(const ColumnarData& data,
                            const size_t& col_idx, 
@@ -87,12 +113,11 @@ double independence_pvalue(const ColumnarData& data,
 
 ViolationTestResult find_violations(
     const ColumnarData& data,
-    size_t left_idx,
+    const std::vector<uint32_t>& lhs_group,
     size_t right_idx,
     const std::vector<int>& violation_rows,
     const AutoRelateFDConfig& config) {
 
-    const auto& left_data = data.columns[left_idx];
     const auto& right_data = data.columns[right_idx];
     const size_t n = data.num_rows;
 
@@ -106,13 +131,11 @@ ViolationTestResult find_violations(
 
         /// group by left values
         for (uint32_t i = 0; i < n; i++) {
-            uint32_t left_value = left_data[i];
-
-            if (left_value == ColumnarData::NULL_VALUE) {
+            if (lhs_group[i] == NULL_GROUP) {
                 continue;
             }
 
-            groups_rows[left_value].push_back(i);
+            groups_rows[lhs_group[i]].push_back(i);
         }
 
         /// build value->counts map
@@ -159,7 +182,7 @@ ViolationTestResult find_violations(
 // !!independence test
 IndependenceTestResult independence_test(
     const ColumnarData& data,
-    size_t left_idx,
+    const std::vector<bool>& is_lhs,
     size_t right_idx,
     const std::vector<bool>& is_violation,
     size_t violation_count,
@@ -184,7 +207,7 @@ IndependenceTestResult independence_test(
 
     // applies the independence test for every column not in the FD
     for (size_t c = 0; c < data.columns.size(); c++) {
-        if (c == left_idx || c == right_idx) continue;
+        if (is_lhs[c] || c == right_idx) continue;
 
         double pvalue = independence_pvalue(data, c, is_violation, n);
         result.pvalue = pvalue;
@@ -203,11 +226,10 @@ IndependenceTestResult independence_test(
 // !!stability score
 double stability_test(
     const ColumnarData& data,
-    size_t left_idx,
+    const std::vector<uint32_t>& lhs_group,
     size_t right_idx,
     const std::vector<bool>& is_violation) {
 
-    const auto& left_data = data.columns[left_idx];
     const auto& right_data = data.columns[right_idx];
     const size_t n = data.num_rows;
 
@@ -218,14 +240,13 @@ double stability_test(
             continue;
         }
 
-        uint32_t left_value = left_data[i];
         uint32_t right_value = right_data[i];
 
-        if (left_value == ColumnarData::NULL_VALUE || right_value == ColumnarData::NULL_VALUE) {
+        if (lhs_group[i] == NULL_GROUP || right_value == ColumnarData::NULL_VALUE) {
             continue;
         }
 
-        groups[left_value].count_values(right_value);
+        groups[lhs_group[i]].count_values(right_value);
     }
 
     /// perturbation test (HT1_FD; score = 1 - HT1_FD())
@@ -269,7 +290,7 @@ double stability_test(
 
 AutoRelateFDResult compute_auto_relate_fd(
     const ColumnarData& data,
-    const std::string& left_col,
+    const std::vector<std::string>& left_cols,
     const std::string& right_col,
     const std::vector<int>& violation_rows,
     const AutoRelateFDConfig& config) {
@@ -277,13 +298,29 @@ AutoRelateFDResult compute_auto_relate_fd(
     using clock = std::chrono::steady_clock;
 
     AutoRelateFDResult result;
-    result.left_col = left_col;
+    result.left_cols = left_cols;
     result.right_col = right_col;
 
-    const size_t left_idx = data.get_column_index(left_col);
+    // const size_t left_idx = data.get_column_index(left_col);
+    std::vector<size_t> left_idxs;
+    std::vector<bool> is_lhs(data.columns.size(), false);
+
+    for (const auto& name : left_cols) {
+        size_t idx = data.get_column_index(name);
+
+        if (idx == SIZE_MAX) {
+            result.score = 1.0; 
+            
+            return result; 
+        }
+
+        left_idxs.push_back(idx);
+        is_lhs[idx] = true;
+    }
+
     const size_t right_idx = data.get_column_index(right_col);
 
-    if (left_idx == SIZE_MAX || right_idx == SIZE_MAX) {
+    if (left_idxs.empty() || right_idx == SIZE_MAX) {
         result.score = 1.0;
 
         return result;
@@ -292,7 +329,10 @@ AutoRelateFDResult compute_auto_relate_fd(
     const size_t n = data.num_rows;
 
     auto build_start = clock::now();
-    ViolationTestResult violations = find_violations(data, left_idx, right_idx, violation_rows, config);
+
+    std::vector<uint32_t> lhs_group = build_lhs_key(data, left_idxs);
+    ViolationTestResult violations = find_violations(data, lhs_group, right_idx, violation_rows, config);
+    
     auto build_end = clock::now();
 
     result.violation_count = violations.violation_count;
@@ -301,7 +341,7 @@ AutoRelateFDResult compute_auto_relate_fd(
 
     auto compute_start = clock::now();
 
-    IndependenceTestResult independence = independence_test(data, left_idx, right_idx, violations.is_violation,
+    IndependenceTestResult independence = independence_test(data, is_lhs, right_idx, violations.is_violation,
                                                             violations.violation_count, result.violation_rate, config);
 
     result.independence_used = independence.used;
@@ -318,7 +358,7 @@ AutoRelateFDResult compute_auto_relate_fd(
         return result;
     }
 
-    result.score = stability_test(data, left_idx, right_idx, violations.is_violation);
+    result.score = stability_test(data, lhs_group, right_idx, violations.is_violation);
     result.is_reliable = (result.score <= config.perturbation_threshold);
 
     auto compute_end = clock::now();

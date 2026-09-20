@@ -20,7 +20,7 @@ struct AutoRelateFDConfig {
 };
 
 struct AutoRelateFDResult {
-    std::string left_col;
+    std::vector<std::string> left_cols;
     std::string right_col;
 
     // reliability score
@@ -42,7 +42,7 @@ struct AutoRelateFDResult {
 // compute Auto-Relate's FD reliability score for one candidate (only FDs in the format left_col -> right_col)
 AutoRelateFDResult compute_auto_relate_fd(
     const ColumnarData& data,
-    const std::string& left_col,
+    const std::vector<std::string>& left_cols,
     const std::string& right_col,
     const std::vector<int>& violation_rows,
     const AutoRelateFDConfig& config = AutoRelateFDConfig());

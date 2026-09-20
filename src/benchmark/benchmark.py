@@ -275,7 +275,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
     return results
 
 
-def violation_rate(row_count: int, violation_rows: list, threshold: float = 0.05    ):
+def violation_rate(row_count: int, violation_rows: list, threshold: float = 0.05):
     return len(violation_rows) / row_count > threshold
     
 def numeric_type(data: pd.DataFrame, left_col: str, right_col: str) -> bool:
