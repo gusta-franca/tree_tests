@@ -28,6 +28,17 @@ struct GroupValues {
     }
 };
 
+struct ViolationTestResult {
+    std::vector<bool> is_violation;
+    size_t violation_count = 0;
+};
+
+struct IndependenceTestResult {
+    bool used = false;
+    bool rejected = false;
+    double pvalue = -1.0;
+};
+
 double independence_pvalue(const ColumnarData& data,
                            const size_t& col_idx, 
                            const std::vector<bool>& is_violation, 
@@ -74,39 +85,21 @@ double independence_pvalue(const ColumnarData& data,
     return res.pvalue;
 }
 
-
-AutoRelateFDResult compute_auto_relate_fd(
+ViolationTestResult find_violations(
     const ColumnarData& data,
-    const std::string& left_col,
-    const std::string& right_col,
+    size_t left_idx,
+    size_t right_idx,
     const std::vector<int>& violation_rows,
     const AutoRelateFDConfig& config) {
-
-    using clock = std::chrono::steady_clock;
-
-    AutoRelateFDResult result;
-    result.left_col = left_col;
-    result.right_col = right_col;
-
-    const size_t left_idx = data.get_column_index(left_col);
-    const size_t right_idx = data.get_column_index(right_col);
-
-    if (left_idx == SIZE_MAX || right_idx == SIZE_MAX) {
-        result.score = 1.0;
-        
-        return result;
-    }
 
     const auto& left_data = data.columns[left_idx];
     const auto& right_data = data.columns[right_idx];
     const size_t n = data.num_rows;
-    std::vector<bool> is_violation(n, false);
-    size_t violation_count = 0;
-    
-    auto build_start = clock::now();
+
+    ViolationTestResult result;
+    result.is_violation.assign(n, false);
 
     if (config.dirty_data) {
-        // !!find violations
         /// Will be substituted by the xy and x maps
         /// ALso adapt every use of left_* later to support multiple LHS columns
         ankerl::unordered_dense::map<uint32_t, std::vector<uint32_t>> groups_rows;
@@ -115,7 +108,7 @@ AutoRelateFDResult compute_auto_relate_fd(
         for (uint32_t i = 0; i < n; i++) {
             uint32_t left_value = left_data[i];
 
-            if (left_value == ColumnarData::NULL_VALUE) { 
+            if (left_value == ColumnarData::NULL_VALUE) {
                 continue;
             }
 
@@ -137,8 +130,8 @@ AutoRelateFDResult compute_auto_relate_fd(
 
             for (const auto& [value, count] : value_counts) {
                 // !!mode()[0]
-                if (count > majority_count || 
-                    count == majority_count && data.dicts[right_idx].at(value) < data.dicts[right_idx].at(majority_value)) {
+                if (count > majority_count ||
+                    (count == majority_count && data.dicts[right_idx].at(value) < data.dicts[right_idx].at(majority_value))) {
                     majority_count = count;
                     majority_value = value;
                 }
@@ -146,67 +139,80 @@ AutoRelateFDResult compute_auto_relate_fd(
 
             for (uint32_t row : rows) {
                 if (right_data[row] != majority_value) {
-                    is_violation[row] = true;
-                    violation_count++;
+                    result.is_violation[row] = true;
+                    result.violation_count++;
                 }
             }
         }
-    }
+    } 
     else {
         for (int idx : violation_rows) {
-                is_violation[idx] = true;
-                violation_count++;
-            }
+            result.is_violation[idx] = true;
+            result.violation_count++;
+        }
     }
 
-    result.violation_count = violation_count;
-    result.violation_rate = (n > 0) ? static_cast<double>(violation_count)/n : 0.0;
+    return result;
+}
 
-    auto build_end = clock::now();
-    result.build_time_s = std::chrono::duration<double>(build_end - build_start).count();
 
-    auto compute_start = clock::now();
-    
-    // !!independence test 
-    if (config.use_independence_test && violation_count > 0) {
-        result.independence_used = true;
+// !!independence test
+IndependenceTestResult independence_test(
+    const ColumnarData& data,
+    size_t left_idx,
+    size_t right_idx,
+    const std::vector<bool>& is_violation,
+    size_t violation_count,
+    double violation_rate,
+    const AutoRelateFDConfig& config) {
 
-        if (result.violation_rate > config.violation_rate_threshold) {
-            result.independence_rejected = true;
-            result.score = 1.0;
-            result.is_reliable = false;
+    IndependenceTestResult result;
 
-            auto compute_end = clock::now();
-            result.compute_time_s = std::chrono::duration<double>(compute_end - compute_start).count();
+    if (!config.use_independence_test || violation_count == 0) {
+        return result;
+    }
 
+    result.used = true;
+
+    if (violation_rate > config.violation_rate_threshold) {
+        result.rejected = true;
+        
+        return result;
+    }
+
+    const size_t n = data.num_rows;
+
+    // applies the independence test for every column not in the FD
+    for (size_t c = 0; c < data.columns.size(); c++) {
+        if (c == left_idx || c == right_idx) continue;
+
+        double pvalue = independence_pvalue(data, c, is_violation, n);
+        result.pvalue = pvalue;
+
+        if (pvalue < config.significance_threshold) {
+            result.rejected = true;
+            
             return result;
         }
-        
-        // applies the independence test for every column not in the FD
-        for (size_t c = 0; c < data.columns.size(); c++) {
-            if (c == left_idx || c == right_idx) continue;
-
-            double pvalue = independence_pvalue(data, c, is_violation, n);
-            result.independence_pvalue = pvalue;
-
-            if (pvalue < config.significance_threshold) {
-                result.independence_rejected = true;
-                result.score = 1.0;
-                result.is_reliable = false;
-
-                auto compute_end = clock::now();
-                result.compute_time_s = std::chrono::duration<double>(compute_end - compute_start).count();
-
-                return result;
-            }
-
-        }
     }
 
-    // !!stability score
-    /// drop violating rows and rows with NULL; group surviving k/v pairs and count them (fd_dict_gen)
+    return result;
+}
+
+
+// !!stability score
+double stability_test(
+    const ColumnarData& data,
+    size_t left_idx,
+    size_t right_idx,
+    const std::vector<bool>& is_violation) {
+
+    const auto& left_data = data.columns[left_idx];
+    const auto& right_data = data.columns[right_idx];
+    const size_t n = data.num_rows;
+
     ankerl::unordered_dense::map<uint32_t, GroupValues> groups;
-    
+
     for (uint32_t i = 0; i < n; i++) {
         if (is_violation[i]) {
             continue;
@@ -247,9 +253,9 @@ AutoRelateFDResult compute_auto_relate_fd(
 
             // weird one element range loop
             if (group.counts[0] > 1) {
-                sum += (1.0 - 
-                        static_cast<double>(value_freq[group.distinct_values[0]]) / 
-                        static_cast<double>(left_value_count)) * 
+                sum += (1.0 -
+                        static_cast<double>(value_freq[group.distinct_values[0]]) /
+                        static_cast<double>(left_value_count)) *
                         group.counts[0];
             }
         }
@@ -257,7 +263,62 @@ AutoRelateFDResult compute_auto_relate_fd(
         perturbation_score = sum / static_cast<double>(left_value_count);
     }
 
-    result.score = 1.0 - perturbation_score;
+    return 1.0 - perturbation_score;
+}
+
+
+AutoRelateFDResult compute_auto_relate_fd(
+    const ColumnarData& data,
+    const std::string& left_col,
+    const std::string& right_col,
+    const std::vector<int>& violation_rows,
+    const AutoRelateFDConfig& config) {
+
+    using clock = std::chrono::steady_clock;
+
+    AutoRelateFDResult result;
+    result.left_col = left_col;
+    result.right_col = right_col;
+
+    const size_t left_idx = data.get_column_index(left_col);
+    const size_t right_idx = data.get_column_index(right_col);
+
+    if (left_idx == SIZE_MAX || right_idx == SIZE_MAX) {
+        result.score = 1.0;
+
+        return result;
+    }
+
+    const size_t n = data.num_rows;
+
+    auto build_start = clock::now();
+    ViolationTestResult violations = find_violations(data, left_idx, right_idx, violation_rows, config);
+    auto build_end = clock::now();
+
+    result.violation_count = violations.violation_count;
+    result.violation_rate = (n > 0) ? static_cast<double>(violations.violation_count) / n : 0.0;
+    result.build_time_s = std::chrono::duration<double>(build_end - build_start).count();
+
+    auto compute_start = clock::now();
+
+    IndependenceTestResult independence = independence_test(data, left_idx, right_idx, violations.is_violation,
+                                                            violations.violation_count, result.violation_rate, config);
+
+    result.independence_used = independence.used;
+    result.independence_rejected = independence.rejected;
+    result.independence_pvalue = independence.pvalue;
+
+    if (independence.rejected) {
+        result.score = 1.0;
+        result.is_reliable = false;
+
+        auto compute_end = clock::now();
+        result.compute_time_s = std::chrono::duration<double>(compute_end - compute_start).count();
+
+        return result;
+    }
+
+    result.score = stability_test(data, left_idx, right_idx, violations.is_violation);
     result.is_reliable = (result.score <= config.perturbation_threshold);
 
     auto compute_end = clock::now();
