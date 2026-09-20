@@ -24,13 +24,22 @@ std::vector<int> parse_violation_rows(const std::string& rows_str) {
 
 int main(int argc, char* argv[]) {
     if (argc < 4) {
-        std::cerr << "Usage: " << argv[0] << " <csv_file> <left_col> <right_col> <dirty|clean>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <csv_file> <left_cols> <right_col> <dirty|clean>" << std::endl;
         
         return 1;
     }
 
     std::string csv_file = argv[1];
-    std::string left_col = argv[2];
+    std::string left_cols_str = argv[2];
+
+    std::vector<std::string> left_cols;
+    std::stringstream ss(left_cols_str);
+    std::string col;
+
+    while (std::getline(ss, col, ',')) {
+        left_cols.push_back(col);
+    }
+
     std::string right_col = argv[3];
     std::string mode = (argc > 4) ? argv[4] : "dirty";
     
@@ -56,11 +65,16 @@ int main(int argc, char* argv[]) {
     auto load_end = std::chrono::steady_clock::now();
     load_time_s = (load_end - load_start);
 
-    AutoRelateFDResult result = compute_auto_relate_fd(data, left_col, right_col, violation_rows, config);
+    AutoRelateFDResult result = compute_auto_relate_fd(data, left_cols, right_col, violation_rows, config);
 
-    std::cout << "RESULT_JSON: {"
-              << "\"left_col\": \"" << result.left_col << "\", "
-              << "\"right_col\": \"" << result.right_col << "\", "
+    std::cout << "RESULT_JSON: {";
+    std::cout << "\"left_cols\": [";
+    for (size_t i = 0; i < result.left_cols.size(); i++) {
+        std::cout << "\"" << result.left_cols[i] << "\"";
+        if (i + 1 < result.left_cols.size()) std::cout << ", ";
+    }
+    std::cout << "], ";
+    std::cout << "\"right_col\": \"" << result.right_col << "\", "
               << "\"score\": " << result.score << ", "
               << "\"independence_pvalue\": " << result.independence_pvalue << ", "
               << "\"independence_used\": " << result.independence_used << ", "

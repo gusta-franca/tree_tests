@@ -190,7 +190,7 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
                 if config["function"] is cpp_auto_relate:
                     stats = config["function"](
                         csv_filepath = datapath, 
-                        lhs = lhs_columns[0], 
+                        lhs = lhs_columns, 
                         rhs = rhs_column,
                         binary_name = config["binary_name"],
                         mode = config["mode"]
@@ -330,7 +330,7 @@ def run_fd_ground_truth_benchmark(
  
             stats = cpp_auto_relate(
                 csv_filepath = filepath,
-                lhs = left_col,
+                lhs = [left_col],
                 rhs = right_col,
                 violation_rows = violation_rows,
                 binary_name = binary_name,
