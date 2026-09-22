@@ -142,29 +142,16 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
     using clock = std::chrono::steady_clock;
     auto t_start = clock::now();
     
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Error: Cannot open file: " << filename << std::endl;
-        return false;
-    }
-    
-    // Parse header
-    std::string header_line;
-    if (!std::getline(file, header_line)) {
-        std::cerr << "Error: Empty file" << std::endl;
-        return false;
-    }
-    
-    std::stringstream ss(header_line);
-    std::string col_name;
-    while (std::getline(ss, col_name, ',')) {
-        // Trim whitespace
-        size_t start = col_name.find_first_not_of(" \t\r\n");
-        size_t end = col_name.find_last_not_of(" \t\r\n");
-        if (start != std::string::npos) {
-            col_name = col_name.substr(start, end - start + 1);
-        }
+    csv::CSVReader reader(filename);
+
+    for (auto& col_name : reader.get_col_names()) {
         data.column_names.push_back(col_name);
+    }
+
+    if (data.column_names.empty()) {
+        std::cerr << "Error: Empty file or no columns found in file: " << filename << std::endl;
+        
+        return false;
     }
 
     size_t num_cols = data.column_names.size();
@@ -172,19 +159,40 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
     
     // Resolve LHS/RHS
     std::vector<size_t> lhs_indices;
+
     for (const auto& name : fd.lhs_columns) {
-        lhs_indices.push_back(data.get_column_index(name));
+        size_t idx = data.get_column_index(name);
+    
+        if (idx == SIZE_MAX) {
+            std::cerr << "load_csv_columnar: LHS column not found: " << name << std::endl;
+            return false;
+        }
+        
+        lhs_indices.push_back(idx);
     }
+
     size_t rhs_idx = data.get_column_index(fd.rhs_column);
     
-    if (verbose) {
-        std::cout << "Columns: ";
-        for (size_t i = 0; i < num_cols; ++i) {
-            std::cout << data.column_names[i];
-            if (i + 1 < num_cols) std::cout << ", ";
-        }
-        std::cout << std::endl;
-    }
+    if (rhs_idx == SIZE_MAX) {
+        std::cerr << "load_csv_columnar: RHS column not found: " << fd.rhs_column << std::endl;
+        return false;
+    }   // if (verbose) {
+    //     std::cout << "Columns: ";
+    //     for (size_t i = 0; i < num_cols; ++i) {
+    //         std::cout << data.column_names[i];
+    //         if (i + 1 < num_cols) std::cout << ", ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+    // if (verbose) {
+    //     std::cout << "Columns: ";
+    //     for (size_t i = 0; i < num_cols; ++i) {
+    //         std::cout << data.column_names[i];
+    //         if (i + 1 < num_cols) std::cout << ", ";
+    //     }
+    //     std::cout << std::endl;
+    // }
     
     // auto hll_build_start = clock::now();
 
@@ -193,7 +201,6 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
     size_t lhs_size = lhs_indices.size();
     std::vector<uint32_t> fd_row(lhs_size + 1);
     std::vector<uint32_t> current_row(num_cols);    
-    std::stringstream row_ss;
 
     hll::HyperLogLog hll_xy(14);                                                // HLL used for estimating XY cardinality
     // std::vector<hll::HyperLogLog> hll_col(num_cols, hll::HyperLogLog(14));     // Vector with every attribute's HLL
@@ -201,62 +208,63 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
     // std::chrono::duration<double> hll_col_time(0);
     
     // Parse data rows
-    std::string line;
+    std::vector<ankerl::unordered_dense::map<std::string, uint32_t>> dicts_str_uint(num_cols);
     size_t row_count = 0;
-    while (std::getline(file, line)) {
-        if (line.empty()) continue;
+    
+    data.dicts.resize(num_cols);
 
-        row_ss.clear();
-        row_ss.str(line);
-        
-        // operate direclty in the char buffer inside getline
-        // if found the separator (in this case, a comma) and the separator points to a bigger address than buf, stores buf's content into value (std::from_chars())
-        // write the value on data.columns and current_row in the current col_idx
-        // make buf point to the next address after separator
-
+    for (auto& row : reader) {
         size_t col_idx = 0;
-        const char* buf = line.data();
-        const char* len = buf + line.size();
-        
-        while (buf < len && col_idx < num_cols) {
-            const char* separator = buf;
-            while (separator < len && *separator != ',') {
-                ++separator;
-            }
-            
+        size_t valid_cols = std::min(row.size(), num_cols);
+
+        while (col_idx < valid_cols) {
+            std::string cell = row[col_idx].get<std::string>();
             uint32_t value = 0;
-            if (separator > buf) {
-                std::from_chars(buf, separator, value);
+
+            auto& dict = dicts_str_uint[col_idx];
+            auto kv_pair = dict.find(cell);
+
+            if (kv_pair != dict.end()) {
+                value = kv_pair->second;
+            } 
+            else {
+                value = static_cast<uint32_t>(dict.size());
+                dict.emplace(cell, value);
+                data.dicts[col_idx].emplace(value, cell);
             }
-            
+
             data.columns[col_idx].push_back(value);
             current_row[col_idx] = value;
-            ++col_idx;
-            
-            buf = separator + 1;
+            col_idx++;
         }
         
         // Pad short rows
-        while (col_idx < num_cols) {
-            data.columns[col_idx].push_back(0);
-            current_row[col_idx] = 0;
-
-            // Measure time taken to build individual sketches
-            // auto col_hll_start = clock::now();
-
-            // uint64_t hash = XXH3_64bits(&current_row[col_idx], sizeof(uint32_t));
-            
-            // hll_col[col_idx].add(hash);
-            // hll_col_time += (clock::now() - col_hll_start);
-
-            ++col_idx;
+        while (col_idx < data.columns.size()) {
+            data.columns[col_idx].push_back(ColumnarData::NULL_VALUE);
+            current_row[col_idx] = ColumnarData::NULL_VALUE;
+            col_idx++;
         }
+        // while (col_idx < num_cols) {
+        //     data.columns[col_idx].push_back(0);
+        //     current_row[col_idx] = 0;
+
+        //     // Measure time taken to build individual sketches
+        //     // auto col_hll_start = clock::now();
+
+        //     // uint64_t hash = XXH3_64bits(&current_row[col_idx], sizeof(uint32_t));
+            
+        //     // hll_col[col_idx].add(hash);
+        //     // hll_col_time += (clock::now() - col_hll_start);
+
+        //     ++col_idx;
+        // }
 
         // Hash and add to HLL
         // auto col_hll_start = clock::now();
         for (size_t i = 0; i < lhs_size; i++) {
             fd_row[i] = current_row[lhs_indices[i]];
         }
+
         fd_row[lhs_size] = current_row[rhs_idx];
         
         uint64_t hash = XXH3_64bits(fd_row.data(), fd_row.size()*sizeof(uint32_t));
@@ -264,7 +272,7 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
 
         // hll_xy_time += (clock::now() - col_hll_start);
         
-        ++row_count;
+        row_count++;
     }
     
     // auto hll_build_end = clock::now();
