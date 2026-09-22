@@ -5,18 +5,34 @@
 
 struct Results {
     double mu_plus;
+
     double rfi_prime_plus;
+
+    double auto_relate_score;
+    size_t auto_relate_violation_count;
+    double auto_relate_violation_rate;
+    bool auto_relate_is_reliable;
+    bool independence_used;
+    bool independence_rejected;
+    double independence_pvalue;
+
     double build_time_s;
     double compute_time_s;
     double mu_compute_time_s;
     double rfi_compute_time_s;
+    double auto_relate_compute_time_s;
+    double independence_compute_time_s;
     double memory_used_mb;
+};
+
+struct AutoRelateResult {
+    double score = 1.0;
+    size_t violation_count = 0;
+    double violation_rate = 0.0;
 };
 
 double mu_plus(size_t num_rows, size_t dom_x_size, double pdep_XY, double pdep_Y);
 
 double rfi_prime_plus(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts, double shannon_XY, double shannon_Y);
 
-// double expected_mi(size_t total_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts);
-
-// double expected_mi_opt(size_t total_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts);
+AutoRelateResult auto_relate(size_t num_rows, const std::vector<uint32_t>& majority_counts, const std::vector<uint32_t>& majority_y_ids);

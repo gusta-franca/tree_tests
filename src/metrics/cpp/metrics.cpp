@@ -161,3 +161,32 @@ double rfi_prime_plus(size_t num_rows, const std::vector<uint32_t>& x_counts, co
 
     return std::max(0.0, rfi_prime);
 }
+
+AutoRelateResult auto_relate(size_t num_rows, const std::vector<uint32_t>& majority_counts, const std::vector<uint32_t>& majority_y_ids) {
+    AutoRelateResult result;
+    if (majority_counts.empty()) { 
+        return result;
+    }
+
+    std::unordered_map<uint32_t, uint64_t> value_freq;
+    uint64_t lv_total = 0;
+
+    for (size_t i = 0; i < majority_counts.size(); i++) {
+        value_freq[majority_y_ids[i]] += majority_counts[i];
+        lv_total += majority_counts[i];
+    }
+
+    double sum = 0.0;
+    for (size_t i = 0; i < majority_counts.size(); i++) {
+        if (majority_counts[i] > 1) {
+            double marginal_freq = static_cast<double>(value_freq[majority_y_ids[i]]) / static_cast<double>(lv_total);
+            sum += (1.0 - marginal_freq) * majority_counts[i];
+        }
+    }
+
+    result.score = 1.0 - (lv_total > 0 ? sum / static_cast<double>(lv_total) : 0.0);
+    result.violation_count = (num_rows > lv_total) ? (num_rows - lv_total) : 0;
+    result.violation_rate = (num_rows > 0) ? static_cast<double>(result.violation_count) / num_rows : 0.0;
+
+    return result;
+}
