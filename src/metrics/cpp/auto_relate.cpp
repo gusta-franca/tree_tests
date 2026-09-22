@@ -9,9 +9,6 @@
 #include "ankerl/unordered_dense.h"
 #include "chi2_fast.hpp"
 
-// used to mark a grouped lhs as null
-static constexpr uint32_t NULL_GROUP = UINT32_MAX - 1;
-
 // struct to hold a group's values and their countings
 struct GroupValues {
     std::vector<uint32_t> distinct_values;
@@ -36,13 +33,7 @@ struct ViolationTestResult {
     size_t violation_count = 0;
 };
 
-struct IndependenceTestResult {
-    bool used = false;
-    bool rejected = false;
-    double pvalue = -1.0;
-};
-
-static std::vector<uint32_t> build_lhs_key(const ColumnarData& data, const std::vector<size_t>& lhs_idxs) {
+std::vector<uint32_t> build_lhs_key(const ColumnarData& data, const std::vector<size_t>& lhs_idxs) {
     const size_t n = data.num_rows;
     std::vector<uint32_t> lhs_group(n);
     const auto& first = data.columns[lhs_idxs[0]];

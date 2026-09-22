@@ -4,6 +4,9 @@
 #include <vector>
 #include "csv_index.h"
 
+// used to mark a grouped lhs as null
+static constexpr uint32_t NULL_GROUP = UINT32_MAX - 1;
+
 struct AutoRelateFDConfig {
     bool dirty_data = true;
     
@@ -40,6 +43,12 @@ struct AutoRelateFDResult {
     double compute_time_s = 0.0; // independence test + stability score?
 };
 
+struct IndependenceTestResult {
+    bool used = false;
+    bool rejected = false;
+    double pvalue = -1.0;
+};
+
 // compute Auto-Relate's FD reliability score for one candidate (only FDs in the format left_col -> right_col)
 AutoRelateFDResult compute_auto_relate_fd(
     const ColumnarData& data,
@@ -47,3 +56,14 @@ AutoRelateFDResult compute_auto_relate_fd(
     const std::string& right_col,
     const std::vector<int>& violation_rows,
     const AutoRelateFDConfig& config = AutoRelateFDConfig());
+
+IndependenceTestResult independence_test(
+    const ColumnarData& data,
+    const std::vector<bool>& is_lhs,
+    size_t right_idx,
+    const std::vector<bool>& is_violation,
+    size_t violation_count,
+    double violation_rate,
+    const AutoRelateFDConfig& config);
+
+std::vector<uint32_t> build_lhs_key(const ColumnarData& data, const std::vector<size_t>& lhs_idxs);
