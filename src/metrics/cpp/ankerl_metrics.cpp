@@ -3,26 +3,33 @@
 #include <iostream>
 #define XXH_INLINE_ALL 1
 #include "ankerl/unordered_dense.h"
+#include "auto_relate.h"
 #include "metrics.h"
 #include "simd_metrics.h"
 #include "xxhash.h"
-
 
 template <size_t N>
 struct array_hash {
     using is_avalanching = void;
 
-    [[nodiscard]] uint64_t operator()(const std::array<uint32_t, N>& arr) const noexcept {
-        return XXH3_64bits(arr.data(), N*sizeof(uint32_t));
+    [[nodiscard]] uint64_t operator()(const std::array<uint32_t, N> &arr) const noexcept {
+        return XXH3_64bits(arr.data(), N * sizeof(uint32_t));
     }
 };
 
+// COmprises information about the majority y value (used for auto-relate)
+struct MajorityInfo {
+    uint32_t count = 0;
+    uint32_t y_id = 0;
+    bool has_majority = false;
+};
+
 template <size_t N>
-Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx, size_t est_xy_card) {
+Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices, size_t rhs_idx, size_t est_xy_card, const AutoRelateFDConfig &config) {
     std::chrono::duration<double> total_build_time(0);
     std::chrono::duration<double> total_compute_time(0);
     size_t peak_memory_b = 0;
-    
+
     Results result = {};
 
     auto build_start = std::chrono::steady_clock::now();
@@ -30,13 +37,16 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
     // Arrays holding the X and Y columns; there will be one for every row
     using XKey = std::array<uint32_t, N>;
     using YKey = std::array<uint32_t, 1>;
-    using XYKey = std::array<uint32_t, N+1>;
+    using XYKey = std::array<uint32_t, N + 1>;
 
     // Row count will be the size of any entry in data.columns, as it is columnar
     size_t num_rows = data.columns[0].size();
 
-    ankerl::unordered_dense::map<XYKey, uint32_t, array_hash<N+1>> xy_table;
+    ankerl::unordered_dense::map<XYKey, uint32_t, array_hash<N + 1>> xy_table;
     xy_table.reserve(est_xy_card);
+
+    // Kept per row so the auto relate's find_violation doesn't have to read every LHS column a second time.
+    std::vector<XKey> row_x_keys(num_rows);
 
     for (size_t row = 0; row < num_rows; row++) {
         XYKey xy_key;
@@ -44,13 +54,14 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
             xy_key[i] = data.columns[lhs_indices[i]][row];
         }
 
-        // Nth slot is reserved for Y 
+        // Nth slot is reserved for Y
         xy_key[N] = data.columns[rhs_idx][row];
 
         // Increments the current XY count if xy_key is already inserted on the hashtable; otherwise, inserts it with count = 1
         xy_table[xy_key]++;
+        std::copy(xy_key.begin(), xy_key.begin() + N, row_x_keys[row].begin());
     }
-    
+
     // Couting X and Y from XY
     // X or Y will have sizes at max equal to xy_table.size()
     uint64_t max_size = xy_table.size();
@@ -59,12 +70,12 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
     x_table.reserve(max_size);
     y_table.reserve(max_size);
 
-    for (const auto& [xy_key, xy_count] : xy_table) {
+    for (const auto &[xy_key, xy_count] : xy_table) {
         // Since std::array doesn't allocate anything on heap, duj
         XKey x_key;
         std::copy(xy_key.begin(), xy_key.begin() + N, x_key.begin());
         x_table[x_key] += xy_count;
-        
+
         YKey y_key = {xy_key[N]};
         y_table[y_key] += xy_count;
     }
@@ -77,49 +88,109 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
     // * `std::vector<value_type>` which holds all data. map/set iterators are just `std::vector<value_type>::iterator`!
     // * An indexing structure (bucket array), which is a flat array with 8-byte buckets.
     size_t bucket_memory = (xy_table.bucket_count() + x_table.bucket_count() + y_table.bucket_count()) * 8;
-    
+
     // Instead of typing the entire type, it is used decltype
     size_t vector_memory = (xy_table.values().capacity() * sizeof(typename decltype(xy_table)::value_type)) +
-                       (x_table.values().capacity()  * sizeof(typename decltype(x_table)::value_type)) +
-                       (y_table.values().capacity()  * sizeof(typename decltype(y_table)::value_type));
+                           (x_table.values().capacity() * sizeof(typename decltype(x_table)::value_type)) +
+                           (y_table.values().capacity() * sizeof(typename decltype(y_table)::value_type));
     size_t object_memory = sizeof(xy_table) + sizeof(x_table) + sizeof(y_table);
-    
-    peak_memory_b += bucket_memory + vector_memory + object_memory;
+
+    // Majority_per_x isn't built yet at this point, so it's bounded by x_table.size() for simplicity
+    size_t row_x_keys_memory = row_x_keys.capacity() * sizeof(XKey);
+    size_t majority_upper_bound = x_table.bucket_count() * 8 + x_table.size() * (sizeof(XKey) + sizeof(MajorityInfo));
+    size_t bitset_memory = (num_rows + 7) / 8 + (data.columns.size() + 7) / 8; // is_violation + is_lhs
+
+    peak_memory_b += bucket_memory + vector_memory + object_memory + row_x_keys_memory + majority_upper_bound + bitset_memory;
 
     auto compute_start = std::chrono::steady_clock::now();
-    
+
     // Compute XY measure
     double pdep_XY = 0.0;
     double shannon_XY = 0.0;
-    
+
+    ankerl::unordered_dense::map<XKey, MajorityInfo, array_hash<N>> majority_per_x;
+
     XKey x_key;
-    for (const auto& [xy_key, xy_count] : xy_table) {
+    for (const auto &[xy_key, xy_count] : xy_table) {
         std::copy(xy_key.begin(), xy_key.begin() + N, x_key.begin());
 
-        uint32_t x_count = x_table[x_key];        
+        uint32_t x_count = x_table[x_key];
 
         pdep_XY += (static_cast<double>(xy_count) * xy_count) / x_count;
         shannon_XY += xy_count * std::log2(static_cast<double>(xy_count) / x_count);
+
+        // Skips nulls (auto-relate only)
+        bool lhs_has_null = std::any_of(x_key.begin(), x_key.end(), [](uint32_t v) { return v == ColumnarData::NULL_VALUE; });
+        uint32_t y_id = xy_key[N];
+
+        if (!lhs_has_null && y_id != ColumnarData::NULL_VALUE) {
+            auto &maj = majority_per_x[x_key];
+            if (xy_count > maj.count ||
+                (xy_count == maj.count && maj.has_majority &&
+                 data.dicts[rhs_idx].at(y_id) < data.dicts[rhs_idx].at(maj.y_id))) {
+                maj.count = xy_count;
+                maj.y_id = y_id;
+                maj.has_majority = true;
+            }
+        }
     }
 
     pdep_XY = pdep_XY / static_cast<double>(num_rows);
     shannon_XY = -1.0 * (shannon_XY / num_rows);
-   
+
     // Auxiliary vectors needed for RFI
     std::vector<uint32_t> x_counts;
     std::vector<uint32_t> y_counts;
     x_counts.reserve(x_table.size());
-    y_counts.reserve(x_table.size());
-    
-    for (const auto& [x_key, x_count] : x_table) {
+    y_counts.reserve(y_table.size());
+
+    for (const auto &[x_key, x_count] : x_table) {
         x_counts.push_back(x_count);
     }
 
-    // Compute Y measures
+    // Auxiliary vectors for auto-relate's stability score
+    std::vector<uint32_t> majority_counts;
+    std::vector<uint32_t> majority_y_ids;
+    majority_counts.reserve(majority_per_x.size());
+    majority_y_ids.reserve(majority_per_x.size());
+
+    for (const auto &[xk, maj] : majority_per_x) {
+        majority_counts.push_back(maj.count);
+        majority_y_ids.push_back(maj.y_id);
+    }
+
+    // find_violations()
+    std::vector<bool> is_violation(num_rows, false);
+    size_t violation_count = 0;
+
+    for (size_t row = 0; row < num_rows; row++) {
+        const XKey &rk = row_x_keys[row];
+        bool lhs_has_null = std::any_of(rk.begin(), rk.end(), [](uint32_t v) { return v == ColumnarData::NULL_VALUE; });
+        if (lhs_has_null)
+            continue;
+
+        auto it = majority_per_x.find(rk);
+        if (it == majority_per_x.end() || !it->second.has_majority) {
+            continue;
+        }
+
+        uint32_t right_value = data.columns[rhs_idx][row];
+        if (right_value != it->second.y_id) {
+            is_violation[row] = true;
+            violation_count++;
+        }
+    }
+
+    double violation_rate = (num_rows > 0) ? static_cast<double>(violation_count) / num_rows : 0.0;
+
+    std::vector<bool> is_lhs(data.columns.size(), false);
+    for (size_t idx : lhs_indices)
+        is_lhs[idx] = true;
+
     double pdep_Y = 0.0;
     double shannon_Y = 0.0;
 
-    for (const auto& [y_key, y_count] : y_table) {
+    for (const auto &[y_key, y_count] : y_table) {
         pdep_Y += (static_cast<double>(y_count) * y_count);
         shannon_Y += y_count * std::log2(static_cast<double>(y_count) / num_rows);
 
@@ -133,55 +204,111 @@ Results execute(const ColumnarData& data, const std::vector<size_t>& lhs_indices
 
     //// don't forget to also register the measures in the results, not just the final metrics.
     //// test implementation with disjoint metric computations and this one
-    
+
     auto compute_end = std::chrono::steady_clock::now();
-        
+
     // Compute metrics
     auto mu_start = std::chrono::steady_clock::now();
     double mu = mu_plus(num_rows, dom_x_size, pdep_XY, pdep_Y);
     auto mu_end = std::chrono::steady_clock::now();
 
     std::chrono::duration<double> mu_time = (mu_end - mu_start);
-    
+
     auto rfi_start = std::chrono::steady_clock::now();
     double rfi = rfi_prime_plus(num_rows, x_counts, y_counts, shannon_XY, shannon_Y);
     auto rfi_end = std::chrono::steady_clock::now();
 
     std::chrono::duration<double> rfi_time = (rfi_end - rfi_start);
-    
-    total_compute_time += (compute_end - compute_start) + mu_time + rfi_time;    
-    
+
+    auto independence_start = std::chrono::steady_clock::now();
+    IndependenceTestResult independence = independence_test(data, is_lhs, rhs_idx, is_violation, violation_count, violation_rate, config);
+    auto independence_end = std::chrono::steady_clock::now();
+
+    std::chrono::duration<double> independence_time = (independence_end - independence_start);
+
+    auto auto_relate_start = std::chrono::steady_clock::now();
+    AutoRelateResult ar;
+    if (independence.rejected) {
+        ar.score = 1.0;
+    }
+    else {
+        ar = auto_relate(num_rows, majority_counts, majority_y_ids);
+    }
+
+    ar.violation_count = violation_count;
+    ar.violation_rate = violation_rate;
+    auto auto_relate_end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> auto_relate_time = (auto_relate_end - auto_relate_start);
+
+    bool ar_is_reliable = (ar.score <= config.perturbation_threshold);
+
+    total_compute_time += (compute_end - compute_start) + mu_time + rfi_time + independence_time + auto_relate_time;
+
     result.mu_plus = mu;
     result.rfi_prime_plus = rfi;
+    result.auto_relate_score = ar.score;
+    result.auto_relate_violation_count = ar.violation_count;
+    result.auto_relate_violation_rate = ar.violation_rate;
+    result.auto_relate_is_reliable = ar_is_reliable;
+    result.independence_used = independence.used;
+    result.independence_rejected = independence.rejected;
+    result.independence_pvalue = independence.pvalue;
     result.build_time_s = total_build_time.count();
     result.compute_time_s = total_compute_time.count();
     result.mu_compute_time_s = mu_time.count();
     result.rfi_compute_time_s = rfi_time.count();
+    result.auto_relate_compute_time_s = auto_relate_time.count();
+    result.independence_compute_time_s = independence_time.count();
     result.memory_used_mb = peak_memory_b / (1024.0 * 1024.0);
 
     return result;
 }
 
-Results compute_metrics(const ColumnarData& data, const FDSpec& fd, const std::string& hash_algo, size_t est_xy_card) {    
-	std::vector<size_t> lhs_indices;
-	for (const auto &col_name : fd.lhs_columns) {
-		lhs_indices.push_back(data.get_column_index(col_name));
-	}
+Results compute_metrics(const ColumnarData &data, const FDSpec &fd, const std::string &hash_algo, size_t est_xy_card, const AutoRelateFDConfig &config) {
+    std::vector<size_t> lhs_indices;
+    for (const auto &col_name : fd.lhs_columns) {
+        size_t idx = data.get_column_index(col_name);
+
+        if (idx == SIZE_MAX) {
+            std::cerr << "compute_metrics: LHS column not found: " << col_name << std::endl;
+        
+            return Results();
+        }
+
+        lhs_indices.push_back(idx);
+    }
 
     size_t rhs_idx = data.get_column_index(fd.rhs_column);
+    
+    if (rhs_idx == SIZE_MAX) {
+        std::cerr << "compute_metrics: RHS column not found: " << fd.rhs_column << std::endl;
+        
+        return Results();
+    }
 
     switch (lhs_indices.size()) {
-        case 1: return execute<1>(data, lhs_indices, rhs_idx, est_xy_card);
-        case 2: return execute<2>(data, lhs_indices, rhs_idx, est_xy_card);
-        case 3: return execute<3>(data, lhs_indices, rhs_idx, est_xy_card);
-        case 4: return execute<4>(data, lhs_indices, rhs_idx, est_xy_card);
-        case 5: return execute<5>(data, lhs_indices, rhs_idx, est_xy_card);
-        case 6: return execute<6>(data, lhs_indices, rhs_idx, est_xy_card);
-        case 7: return execute<7>(data, lhs_indices, rhs_idx, est_xy_card);
-        case 8: return execute<8>(data, lhs_indices, rhs_idx, est_xy_card);
-        case 9: return execute<9>(data, lhs_indices, rhs_idx, est_xy_card);
-        case 10: return execute<10>(data, lhs_indices, rhs_idx, est_xy_card);
-        default: std::cout << "Unsupported number of LHS columns"; 
+    case 1:
+        return execute<1>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    case 2:
+        return execute<2>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    case 3:
+        return execute<3>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    case 4:
+        return execute<4>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    case 5:
+        return execute<5>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    case 6:
+        return execute<6>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    case 7:
+        return execute<7>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    case 8:
+        return execute<8>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    case 9:
+        return execute<9>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    case 10:
+        return execute<10>(data, lhs_indices, rhs_idx, est_xy_card, config);
+    default:
+        std::cout << "Unsupported number of LHS columns";
     }
 
     return Results();
