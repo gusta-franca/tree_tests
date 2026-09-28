@@ -152,8 +152,8 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
         # {"name": "cpp_mu_plus_partitioned", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_partitioned_test"},
         # {"name": "cpp_mu_plus_simd_murmur", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
         # {"name": "cpp_mu_plus_simd_xxhash", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
-        {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
-        {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
+        # {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
+        # {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
         {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
         # {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "clean"},
         # {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "dirty"}
@@ -247,11 +247,11 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
                 elif "rfi" in config["name"]:
                     rfi = stats["result_value"]
 
-            score = stats.get("score")
-            is_reliable = stats.get("is_reliable")
-            violation_count = stats.get("violation_count")
-            violation_rate = stats.get("violation_rate")
-            
+            score = stats.get("score", stats.get("auto_relate_score"))
+            is_reliable = stats.get("is_reliable", stats.get("auto_relate_is_reliable"))
+            violation_count = stats.get("violation_count", stats.get("auto_relate_violation_count"))
+            violation_rate = stats.get("violation_rate", stats.get("auto_relate_violation_rate"))
+
             results.append({
                 "scenario": scenario["name"],
                 "implementation": config["name"],
@@ -261,10 +261,15 @@ def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
                 "is_reliable": is_reliable,
                 "violation_count": violation_count,
                 "violation_rate": round(violation_rate, 5) if violation_rate is not None else None,
+                "independence_used": stats.get("independence_used"),
+                "independence_rejected": stats.get("independence_rejected"),
+                "independence_pvalue": stats.get("independence_pvalue"),
                 "load_time_s": load_time,
                 "build_time_s": build_time,
                 "mu_time_s": mu_time,
                 "rfi_time_s": rfi_time,
+                "auto_relate_time_s": stats.get("auto_relate_time_s"),
+                "independence_time_s": stats.get("independence_time_s"),
                 "total_compute_time_s": compute_time,
                 "total_time_s": total_time,
                 "memory_used_mb": memory_used,

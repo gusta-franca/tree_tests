@@ -35,17 +35,16 @@ _BUCKETING_SIMD_TEST_OBJS := $(_BUCKETING_SIMD_TEST_OBJS:.c=.o)
 BUCKETING_SIMD_TEST_OBJS = $(addprefix build/obj/, $(_BUCKETING_SIMD_TEST_OBJS))
 
 ANKERL_TEST_TARGET = build/bin/ankerl_test
-ANKERL_TEST_SRCS = ankerl_test.cpp ankerl_metrics.cpp metrics.cpp utils.cpp fd_input.cpp csv_index.cpp roaring.c 
+ANKERL_TEST_SRCS = auto_relate.cpp ankerl_test.cpp ankerl_metrics.cpp metrics.cpp utils.cpp fd_input.cpp csv_index.cpp roaring.c 
 _ANKERL_TEST_OBJS = $(ANKERL_TEST_SRCS:.cpp=.o)
 _ANKERL_TEST_OBJS := $(_ANKERL_TEST_OBJS:.c=.o)
 ANKERL_TEST_OBJS = $(addprefix build/obj/, $(_ANKERL_TEST_OBJS))
 
 AUTO_RELATE_TEST_TARGET = build/bin/auto_relate_test
-AUTO_RELATE_TEST_SRCS = auto_relate_test.cpp auto_relate.cpp metrics.cpp utils.cpp fd_input.cpp csv_index.cpp roaring.c 
+AUTO_RELATE_TEST_SRCS = auto_relate_test.cpp auto_relate.cpp metrics.cpp utils.cpp fd_input.cpp csv_index.cpp roaring.c
 _AUTO_RELATE_TEST_OBJS = $(AUTO_RELATE_TEST_SRCS:.cpp=.o)
 _AUTO_RELATE_TEST_OBJS := $(_AUTO_RELATE_TEST_OBJS:.c=.o)
 AUTO_RELATE_TEST_OBJS = $(addprefix build/obj/, $(_AUTO_RELATE_TEST_OBJS))
-
 
 $(FD_CHECKER_TEST_TARGET): $(FD_CHECKER_TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
@@ -67,7 +66,6 @@ $(ANKERL_TEST_TARGET): $(ANKERL_TEST_OBJS)
 
 $(AUTO_RELATE_TEST_TARGET): $(AUTO_RELATE_TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
-
 
 .PHONY: all clean run setup directories fd_checker_test fd_metrics_test fd_metrics_opt_test fd_metrics_partitioned_test bucketing_simd_test ankerl_test auto_relate_test
 
