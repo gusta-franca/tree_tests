@@ -38,7 +38,7 @@ size_t ColumnarData::get_distinct_count(size_t col_idx) const {
     // Compute on-demand using a set
     ankerl::unordered_dense::set<uint32_t> unique_vals;
     for (uint32_t val : columns[col_idx]) {
-        // if (val == ColumnarData::NULL_VALUE) continue;
+        if (val == ColumnarData::NULL_VALUE) continue;
 
         unique_vals.insert(val);
     }
