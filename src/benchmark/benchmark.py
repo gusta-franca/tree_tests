@@ -12,6 +12,61 @@ from src.metrics.python.cpp_metrics import cpp_metrics, cpp_auto_relate
 from src.benchmark.plot import plot_rank_frequency
 from src.generator.generator import generate_SYN 
 
+AUTO_RELATE_FIELDS = {
+    "score": ["score", "auto_relate_score"],
+    "is_reliable": ["is_reliable", "auto_relate_is_reliable"],
+    "violation_count": ["violation_count", "auto_relate_violation_count"],
+    "violation_rate": ["violation_rate", "auto_relate_violation_rate"],
+    "independence_pvalue": ["independence_pvalue"],
+    "independence_used": ["independence_used"],
+    "independence_rejected": ["independence_rejected"],
+    "load_time_s": ["load_time_s"],
+    "build_time_s": ["build_time_s"],
+    "compute_time_s": ["compute_time_s"],
+}
+
+FD_GROUND_TRUTH_METRIC_CONFIG = [
+    {
+        "name": "cpp_auto_relate",
+        "function": cpp_auto_relate,
+        "field_map": AUTO_RELATE_FIELDS,
+        "build_kwargs": lambda filepath, left_col, right_col, violation_rows, mode: {
+            "csv_filepath": filepath,
+            "lhs": [left_col],
+            "rhs": right_col,
+            "violation_rows": violation_rows,
+            "binary_name": "auto_relate_test",
+            "mode": mode,
+        },
+    },
+    {
+        "name": "cpp_metrics_ankerl",
+        "function": cpp_metrics,
+        "field_map": AUTO_RELATE_FIELDS,
+        "build_kwargs": lambda filepath, left_col, right_col, violation_rows, mode: {
+            "csv_filepath": filepath,
+            "lhs": [left_col],
+            "rhs": right_col,
+            "binary_name": "ankerl_test",
+            "algo": "xxhash",
+        },
+    },
+]
+
+def get_fields(stats: dict, fields: Dict[str, List[str]]) -> dict:
+    extracted = {}
+
+    for name, keys in fields.items():
+        value = None
+        
+        for k in keys:
+            if k in stats:
+                value = stats[k]
+                break
+        
+        extracted[name] = value
+    
+    return extracted
 
 def get_dataset_path(scenario: Dict[str, Any]) -> str:
    
@@ -285,41 +340,39 @@ def violation_rate(row_count: int, violation_rows: list, threshold: float = 0.05
     
 def numeric_type(data: pd.DataFrame, left_col: str, right_col: str) -> bool:
     return (pd.api.types.is_numeric_dtype(data[left_col]) and pd.api.types.is_numeric_dtype(data[right_col]))
-    
-# see if I can resue this function to run the other algorithms with data/FD/ datasets
-def run_fd_ground_truth_benchmark(
+
+def run_metric_fd_ground_truth(
+    metric_config: Dict[str, Any],
     fd_filepath: str = "data/FD",
     data_type: str = "clean_data",
-    binary_name: str = "auto_relate_test",
 ) -> pd.DataFrame:
 
     if data_type not in ("clean_data", "dirty_data"):
         print(f"Enter a valid data_type, not {data_type}")
-        return
- 
+        return pd.DataFrame()
+
     filename = "clean_data.csv" if data_type == "clean_data" else "dirty_data_mix_0.1.csv"
     mode = "clean" if data_type == "clean_data" else "dirty"
- 
-    case_ids = sorted(case_id for case_id in 
-                      os.listdir(fd_filepath) if os.path.isdir(os.path.join(fd_filepath, case_id))
+
+    case_ids = sorted(
+        case_id for case_id in os.listdir(fd_filepath)
+        if os.path.isdir(os.path.join(fd_filepath, case_id))
     )
 
     rows = []
- 
+
     for case_id in case_ids:
         case_dir = os.path.join(fd_filepath, case_id)
         filepath = os.path.join(case_dir, filename)
         gt_path = os.path.join(case_dir, "ground_truth.csv")
- 
+
         if not os.path.exists(filepath) or not os.path.exists(gt_path):
             print(f"Skipping {case_id} for missing {filename} or ground_truth.csv")
             continue
 
-        # used only for early rejection, before calling the computation per se like the original
         df = pd.read_csv(filepath)
- 
         gt_df = pd.read_csv(gt_path)
-  
+
         for _, candidate in gt_df.iterrows():
             left_col = candidate["left_col"]
             right_col = candidate["right_col"]
@@ -328,47 +381,52 @@ def run_fd_ground_truth_benchmark(
 
             violation_rows_list = ast.literal_eval(violation_rows) if isinstance(violation_rows, str) else violation_rows
 
-            if (sample_type == 'N' and 
-            (violation_rate(len(df), violation_rows_list) or
-            numeric_type(df, left_col, right_col))):
+            if (sample_type == 'N' and
+                (violation_rate(len(df), violation_rows_list) or
+                 numeric_type(df, left_col, right_col))):
                 continue
- 
-            stats = cpp_auto_relate(
-                csv_filepath = filepath,
-                lhs = [left_col],
-                rhs = right_col,
-                violation_rows = violation_rows,
-                binary_name = binary_name,
-                mode = mode
-            )
- 
+
+            call_args = metric_config["build_kwargs"](filepath, left_col, right_col, violation_rows, mode)
+            stats = metric_config["function"](**call_args)
+
             if not stats:
-                print(f"no result for {case_id}: {left_col} -> {right_col}")
+                print(f"[{metric_config['name']}] no result for {case_id}: {left_col} -> {right_col}")
                 continue
- 
-            rows.append({
+
+            row = {
                 "case_id": case_id,
                 "left_col": left_col,
                 "right_col": right_col,
                 "sample_type": sample_type,
-                "score": stats.get("score"),
-                "independence_pvalue": stats.get("independence_pvalue"),
-                "independence_used": stats.get("independence_used"),
-                "independence_rejected": stats.get("independence_rejected"),
-                "is_reliable": stats.get("is_reliable"),
-                "violation_count": stats.get("violation_count"),
-                "violation_rate": stats.get("violation_rate"),
-                "load_time_s": stats.get("load_time_s"),
-                "build_time_s": stats.get("build_time_s"),
-                "compute_time_s": stats.get("compute_time_s"),
-            })
- 
+                "implementation": metric_config["name"],
+            }
+            row.update(get_fields(stats, metric_config["field_map"]))
+            rows.append(row)
+
     results_df = pd.DataFrame(rows)
- 
-    save_results(results_df, prefix = f"fd_ground_truth_{data_type}")
-    print_fd_ground_truth_metrics(results_df, threshold = 0.5)
- 
+    save_results(results_df, prefix=f"fd_ground_truth_{data_type}_{metric_config['name']}")
+
+    if "score" in results_df.columns:
+        print_fd_ground_truth_metrics(results_df, threshold=metric_config.get("score_threshold", 0.5))
+
     return results_df
+    
+def run_benchmark_fd_ground_truth(
+    metric_configs: List[Dict[str, Any]] = None,
+    fd_filepath: str = "data/FD",
+    data_type: str = "clean_data",
+) -> pd.DataFrame:
+
+    if metric_configs is None:
+        metric_configs = FD_GROUND_TRUTH_METRIC_CONFIG
+
+    all_results = []
+    for config in metric_configs:
+        print(f"\nRunning FD ground-truth benchmark: \"{config['name']}\" on {data_type}\n")
+        all_results.append(run_metric_fd_ground_truth(config, fd_filepath, data_type))
+
+    return pd.concat(all_results, ignore_index=True) if all_results else pd.DataFrame()
+
  
 def print_fd_ground_truth_metrics(results_df: pd.DataFrame, threshold: float = 0.5):
     if results_df.empty:
@@ -391,3 +449,4 @@ def print_fd_ground_truth_metrics(results_df: pd.DataFrame, threshold: float = 0
     print(f"\nAuto-Relate metrics (theshold = {threshold})")
     print(f"Candidates scored: {len(scored)} / {len(results_df)}")
     print(f"TP = {tp}, FP = {fp}, FN = {fn}")
+    print(f"Precision, Recall, F1 = ({precision}, {recall}, {f1})")
