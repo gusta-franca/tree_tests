@@ -3,6 +3,7 @@
 #include <boost/math/distributions/chi_squared.hpp>
 #include <chrono>
 #include <cmath>
+#include <sstream>
 #include <vector>
 
 #include "auto_relate.h"
@@ -46,8 +47,14 @@ std::vector<uint32_t> build_lhs_key(const ColumnarData& data, const std::vector<
         ankerl::unordered_dense::map<uint64_t, uint32_t> remap;
 
         for (size_t k = 0; k < n; k++) {
-            if (lhs_group[k] == NULL_GROUP) continue;
-            if (col[k] == ColumnarData::NULL_VALUE) { lhs_group[k] = NULL_GROUP; continue; }
+            if (lhs_group[k] == NULL_GROUP) {
+                continue;
+            }
+
+            if (col[k] == ColumnarData::NULL_VALUE) { 
+                lhs_group[k] = NULL_GROUP; 
+                continue; 
+            }
 
             uint64_t key = (uint64_t(lhs_group[k]) << 32) | col[k];
             lhs_group[k] = remap.try_emplace(key, static_cast<uint32_t>(remap.size())).first->second;
@@ -56,13 +63,30 @@ std::vector<uint32_t> build_lhs_key(const ColumnarData& data, const std::vector<
     return lhs_group;
 }
 
+std::vector<int> parse_violation_rows(const std::string& rows_str) {
+    std::vector<int> rows;
+
+    if (rows_str.empty() || rows_str == "") {
+        return rows;
+    }
+
+    std::stringstream ss(rows_str);
+    std::string r;
+
+    while (std::getline(ss, r, ',')) {
+        rows.push_back(stoi(r));
+    }
+
+    return rows;
+}
+
 double independence_pvalue(const ColumnarData& data,
                            const size_t& col_idx, 
                            const std::vector<bool>& is_violation, 
                            size_t n) {
     const auto& column = data.columns[col_idx];
     
-    // chi2_fast.h and mostly degrees of freedom need the exact cardinality?
+    // chi2_fast.h needs the exact cardinality for degrees of freedom
     size_t card = data.get_distinct_count(col_idx);
 
     // no point in computing for columns with less than 2 unique values
@@ -95,8 +119,6 @@ double independence_pvalue(const ColumnarData& data,
         return 1.0;
     }
 
-    // analogue to scipy's chi2_contingency()
-    /// needs more validation, some 
     chi2fast::Result res = chi2fast::chi2_2xN(holds.data(), violates.data(), card);
 
     return res.pvalue;
@@ -169,8 +191,6 @@ ViolationTestResult find_violations(
     return result;
 }
 
-
-// !!independence test
 IndependenceTestResult independence_test(
     const ColumnarData& data,
     const std::vector<bool>& is_lhs,
@@ -214,7 +234,6 @@ IndependenceTestResult independence_test(
 }
 
 
-// !!stability score
 double stability_test(
     const ColumnarData& data,
     const std::vector<uint32_t>& lhs_group,
@@ -292,7 +311,6 @@ AutoRelateFDResult compute_auto_relate_fd(
     result.left_cols = left_cols;
     result.right_col = right_col;
 
-    // const size_t left_idx = data.get_column_index(left_col);
     std::vector<size_t> left_idxs;
     std::vector<bool> is_lhs(data.columns.size(), false);
 

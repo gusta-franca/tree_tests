@@ -66,4 +66,7 @@ IndependenceTestResult independence_test(
     double violation_rate,
     const AutoRelateFDConfig& config);
 
+
 std::vector<uint32_t> build_lhs_key(const ColumnarData& data, const std::vector<size_t>& lhs_idxs);
+
+std::vector<int> parse_violation_rows(const std::string& rows_str);
