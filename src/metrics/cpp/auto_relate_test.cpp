@@ -1,55 +1,34 @@
 #include <chrono>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "auto_relate.h"
 #include "csv_index.h"
 
-std::vector<int> parse_violation_rows(const std::string& rows_str) {
-    std::vector<int> rows;
-
-    if (rows_str.empty() || rows_str == "") {
-        return rows;
-    }
-
-    std::stringstream ss(rows_str);
-    std::string r;
-
-    while (std::getline(ss, r, ',')) {
-        rows.push_back(stoi(r));
-    }
-
-    return rows;
-}
-
 int main(int argc, char* argv[]) {
     if (argc < 4) {
         std::cerr << "Usage: " << argv[0] << " <csv_file> <left_cols> <right_col> <dirty|clean>" << std::endl;
-        
         return 1;
     }
 
     std::string csv_file = argv[1];
-    std::string left_cols_str = argv[2];
+    std::string lhs_str = argv[2];
+    std::string right_col = argv[3];
+    std::string mode = (argc > 4) ? argv[4] : "dirty";
 
     std::vector<std::string> left_cols;
-    std::stringstream ss(left_cols_str);
+    std::stringstream lhs_ss(lhs_str);
     std::string col;
-
-    while (std::getline(ss, col, ',')) {
+    while (std::getline(lhs_ss, col, ',')) {
         left_cols.push_back(col);
     }
 
-    std::string right_col = argv[3];
-    std::string mode = (argc > 4) ? argv[4] : "dirty";
-    
     std::string v_rows_str;
     std::getline(std::cin, v_rows_str);
-
-    std::vector<int> violation_rows = parse_violation_rows(v_rows_str);
+    std::vector<int> violation_rows = parse_violation_rows(v_rows_str);  // now from auto_relate.h/.cpp, not redefined here
 
     AutoRelateFDConfig config;
-
     config.dirty_data = (mode == "dirty");
     config.use_independence_test = config.dirty_data;
 
@@ -67,14 +46,18 @@ int main(int argc, char* argv[]) {
 
     AutoRelateFDResult result = compute_auto_relate_fd(data, left_cols, right_col, violation_rows, config);
 
-    std::cout << "RESULT_JSON: {";
-    std::cout << "\"left_cols\": [";
+    std::string left_cols_str;
     for (size_t i = 0; i < result.left_cols.size(); i++) {
-        std::cout << "\"" << result.left_cols[i] << "\"";
-        if (i + 1 < result.left_cols.size()) std::cout << ", ";
+        if (i > 0) {
+            left_cols_str += ",";
+        }
+        
+        left_cols_str += result.left_cols[i];
     }
-    std::cout << "], ";
-    std::cout << "\"right_col\": \"" << result.right_col << "\", "
+
+    std::cout << "RESULT_JSON: {"
+              << "\"left_cols\": \"" << left_cols_str << "\", "
+              << "\"right_col\": \"" << result.right_col << "\", "
               << "\"score\": " << result.score << ", "
               << "\"independence_pvalue\": " << result.independence_pvalue << ", "
               << "\"independence_used\": " << result.independence_used << ", "

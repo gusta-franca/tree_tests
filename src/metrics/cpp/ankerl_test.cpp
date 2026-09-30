@@ -5,9 +5,10 @@
 #include <sstream>  
 #include <string>
 
+#include "ankerl_metrics.h"
+#include "auto_relate.h"
 #include "csv_index.h"
 #include "fd_input.h"
-#include "ankerl_metrics.h"
 
 
 int main(int argc, char* argv[]) {
@@ -18,11 +19,16 @@ int main(int argc, char* argv[]) {
     std::string csv_file = argv[1];
     std::string lhs_str = argv[2];
     std::string rhs_str = argv[3];
-    std::string algo = "auto";
-    
-    if (argc > 4) {
-        algo = argv[4]; 
-    }
+    std::string algo = (argc > 4) ? argv[4] : "auto";
+    std::string mode = (argc > 5) ? argv[5] : "dirty";
+
+    std::string v_rows_str;
+    std::getline(std::cin, v_rows_str);
+    std::vector<int> violation_rows = parse_violation_rows(v_rows_str);  // reuse from auto_relate_test.cpp
+
+    AutoRelateFDConfig config;
+    config.dirty_data = (mode == "dirty");
+    config.use_independence_test = config.dirty_data;
 
     std::chrono::duration<double> load_time_s(0);
     auto load_start = std::chrono::steady_clock::now();
@@ -31,10 +37,10 @@ int main(int argc, char* argv[]) {
     fd.rhs_column = rhs_str;
     std::stringstream ss(lhs_str);
     std::string col;
-    while (std::getline(ss, col, ',')) {
+    while (std::getline(ss, col, '|')) {
         fd.lhs_columns.push_back(col);
     }
-    
+
     ColumnarData data;
     size_t est_xy_card = 0;
     if (!load_csv_columnar(csv_file, data, fd, est_xy_card, false)) {
@@ -45,7 +51,7 @@ int main(int argc, char* argv[]) {
     auto load_end = std::chrono::steady_clock::now();
     load_time_s = (load_end - load_start);
 
-    Results result = compute_metrics(data, fd, algo, est_xy_card, AutoRelateFDConfig());
+    Results result = compute_metrics(data, fd, algo, est_xy_card, config, violation_rows);
 
     std::cout << "RESULT_JSON: {"
           << "\"mu_plus\": " << result.mu_plus << ", "
