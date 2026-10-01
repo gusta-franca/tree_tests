@@ -33,6 +33,9 @@ struct AutoRelateResult {
 
 double mu_plus(size_t num_rows, size_t dom_x_size, double pdep_XY, double pdep_Y);
 
+// e_mi for a single (a, b) pair; exposed so naive metrics can use it oo
+double expected_mi_pair(int n, int a, int b, const std::vector<double>& lgamma_cache);
+
 double rfi_prime_plus(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts, double shannon_XY, double shannon_Y);
 
 AutoRelateResult auto_relate(size_t num_rows, const std::vector<uint32_t>& majority_counts, const std::vector<uint32_t>& majority_y_ids);

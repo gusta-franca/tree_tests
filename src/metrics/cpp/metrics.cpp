@@ -22,50 +22,37 @@ double mu_plus(size_t num_rows, size_t dom_x_size, double pdep_XY, double pdep_Y
     return std::max(0.0, mu);
 }
 
-// double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts) {
-//     int n = static_cast<int>(num_rows);
-//     double m = 0.0;
+double expected_mi_pair(int n, int a, int b, const std::vector<double>& lgamma_cache) {
+    double log_comb_n_a = lgamma_cache[n] - lgamma_cache[a] - lgamma_cache[n - a];
 
-//     for (uint32_t x_c : x_counts) {
-//         int a = static_cast<int>(x_c);
-        
-//         double log_comb_n_a = std::lgamma(n+1) - std::lgamma(a+1) - std::lgamma(n-a+1);
+    int k0 = std::max(0, a + b - n);
+    int k_max = std::min(a, b);
 
-//         for (uint32_t y_c : y_counts) {
-//             int b = static_cast<int>(y_c);
+    double log_p0 = (lgamma_cache[b] - lgamma_cache[k0] - lgamma_cache[b - k0])
+                  + (lgamma_cache[n - b] - lgamma_cache[a - k0] - lgamma_cache[n - a - b + k0])
+                  - log_comb_n_a;
 
-//             int k0 = std::max(0, a + b - n);
-//             int k_max = std::min(a, b);
+    double p0 = std::exp(log_p0);
+    double e_mi = 0.0;
 
-//             double log_p0 = (std::lgamma(b + 1) - std::lgamma(k0 + 1) - std::lgamma(b - k0 + 1))
-//                           + (std::lgamma(n - b + 1) - std::lgamma(a - k0 + 1) - std::lgamma(n - a - b + k0 + 1))
-//                           - log_comb_n_a;
-            
-//             double p0 = std::exp(log_p0);
-//             double e_mi = 0.0; // mi for just one 'a' and 'b' pair
+    if (k0 != 0) {
+        double k0_d = static_cast<double>(k0);
+        e_mi += p0 * (k0_d / n) * std::log2((k0_d * n) / (static_cast<double>(a) * b));
+    }
 
-//             if (k0 != 0) {
-//                 double k0_d = static_cast<double>(k0);
-//                 e_mi += p0 * (k0_d / n) * std::log2((k0_d * n) / (static_cast<double>(a) * b));
-//             }
+    for (int k1 = k0 + 1; k1 <= k_max; k1++) {
+        double k0_d = static_cast<double>(k0);
+        double k1_d = static_cast<double>(k1);
 
-//             for (int k1 = k0 + 1; k1 <= k_max; k1++) {
-//                 double k0_d = static_cast<double>(k0);
-//                 double k1_d = static_cast<double>(k1);
+        p0 *= ((static_cast<double>(a) - k0_d) * (static_cast<double>(b) - k0_d)) /
+              (k1_d * (static_cast<double>(n) - a - b + k1_d));
 
-//                 p0 *= ((static_cast<double>(a) - k0_d) * (static_cast<double>(b) - k0_d)) / 
-//                       (k1_d * (static_cast<double>(n) - a - b + k1_d));
-                
-//                 e_mi += p0 * (k1_d / n) * std::log2((k1_d * n) / (static_cast<double>(a) * b));
-//                 k0 = k1;
-//             }
+        e_mi += p0 * (k1_d / n) * std::log2((k1_d * n) / (static_cast<double>(a) * b));
+        k0 = k1;
+    }
 
-//             m += e_mi;
-//         }
-//     }
-
-//     return m;
-// }
+    return e_mi;
+}
 
 double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts) {
     int n = static_cast<int>(num_rows);
@@ -115,33 +102,7 @@ double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const
             int b = y_pair.first;
             uint64_t freq_b = y_pair.second;
 
-            int k0 = std::max(0, a + b - n);
-            int k_max = std::min(a, b);
-
-            double log_p0 = (lgamma_cache[b] - lgamma_cache[k0] - lgamma_cache[b - k0])
-                          + (lgamma_cache[n - b] - lgamma_cache[a - k0] - lgamma_cache[n - a - b + k0])
-                          - log_comb_n_a;
-            
-            double p0 = std::exp(log_p0);
-            double e_mi = 0.0; // mi for just one 'a' and 'b' pair
-
-            if (k0 != 0) {
-                double k0_d = static_cast<double>(k0);
-                e_mi += p0 * (k0_d / n) * std::log2((k0_d * n) / (static_cast<double>(a) * b));
-            }
-
-            for (int k1 = k0 + 1; k1 <= k_max; k1++) {
-                double k0_d = static_cast<double>(k0);
-                double k1_d = static_cast<double>(k1);
-
-                p0 *= ((static_cast<double>(a) - k0_d) * (static_cast<double>(b) - k0_d)) / 
-                      (k1_d * (static_cast<double>(n) - a - b + k1_d));
-                
-                e_mi += p0 * (k1_d / n) * std::log2((k1_d * n) / (static_cast<double>(a) * b));
-                k0 = k1;
-            }
-
-            m += e_mi * static_cast<double>(a_freq) * static_cast<double>(freq_b);
+            m += expected_mi_pair(n, a, b, lgamma_cache);
         }
     }
 
