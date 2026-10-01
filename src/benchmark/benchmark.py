@@ -8,50 +8,10 @@ from typing import Any, Dict, List
 
 from src.metrics.python.adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
 from src.metrics.python.mu_plus_opt import mu_plus_opt
-from src.metrics.python.cpp_metrics import cpp_metrics, cpp_auto_relate
+from src.metrics.python.cpp_metrics import run_cpp_binary, format_violation_rows
 from src.benchmark.plot import plot_rank_frequency
 from src.generator.generator import generate_SYN 
 
-AUTO_RELATE_FIELDS = {
-    "score": ["score", "auto_relate_score"],
-    "is_reliable": ["is_reliable", "auto_relate_is_reliable"],
-    "violation_count": ["violation_count", "auto_relate_violation_count"],
-    "violation_rate": ["violation_rate", "auto_relate_violation_rate"],
-    "independence_pvalue": ["independence_pvalue"],
-    "independence_used": ["independence_used"],
-    "independence_rejected": ["independence_rejected"],
-    "load_time_s": ["load_time_s"],
-    "build_time_s": ["build_time_s"],
-    "compute_time_s": ["compute_time_s"],
-}
-
-FD_GROUND_TRUTH_METRIC_CONFIG = [
-    {
-        "name": "cpp_auto_relate",
-        "function": cpp_auto_relate,
-        "field_map": AUTO_RELATE_FIELDS,
-        "build_kwargs": lambda filepath, left_col, right_col, violation_rows, mode: {
-            "csv_filepath": filepath,
-            "lhs": [left_col],
-            "rhs": right_col,
-            "violation_rows": violation_rows,
-            "binary_name": "auto_relate_test",
-            "mode": mode,
-        },
-    },
-    {
-        "name": "cpp_metrics_ankerl",
-        "function": cpp_metrics,
-        "field_map": AUTO_RELATE_FIELDS,
-        "build_kwargs": lambda filepath, left_col, right_col, violation_rows, mode: {
-            "csv_filepath": filepath,
-            "lhs": [left_col],
-            "rhs": right_col,
-            "binary_name": "ankerl_test",
-            "algo": "xxhash",
-        },
-    },
-]
 
 def get_fields(stats: dict, fields: Dict[str, List[str]]) -> dict:
     extracted = {}
@@ -172,7 +132,16 @@ def save_results(results, prefix: str = "benchmark"):
     df = pd.DataFrame(results)
     df.to_csv(filepath, index = False)
     print(f"\nResults saved in {filepath}")
+
+def run_metric(function, build_kwargs, field_map, call_args) -> dict:
+    kwargs = build_kwargs(*call_args)
+    stats = function(**kwargs)
+
+    if not stats:
+        return None
     
+    return get_fields(stats, field_map)
+
 
 def run_python_metric(metric_func, csv_filepath, lhs, rhs):
     
@@ -198,148 +167,74 @@ def run_python_metric(metric_func, csv_filepath, lhs, rhs):
     }
 
 
-def run_benchmarks(scenarios: List[Dict[str, Any]]) -> pd.DataFrame:
+def python_metric_runner(metric_func, target_field: str, own_time_field: str):
+    def run(csv_filepath, lhs, rhs):
+        stats = run_python_metric(metric_func=metric_func, csv_filepath=csv_filepath, lhs=lhs, rhs=rhs)
+        return {
+            target_field: stats.get("result_value"),
+            own_time_field: stats.get("compute_time_s", 0.0),
+            "load_time_s": stats.get("load_time_s", 0.0),
+            "build_time_s": stats.get("build_time_s", 0.0),
+            "compute_time_s": stats.get("compute_time_s", 0.0),
+            "memory_used_mb": stats.get("memory_used_mb", 0.0),
+        }
     
-    metrics_config = [
-        # {"name": "py_mu_plus", "function": mu_plus, "is_cpp": False},
-        # {"name": "py_mu_plus_opt", "function": mu_plus_opt, "is_cpp": False},
-        # {"name": "cpp_mu_plus_auto", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_opt_test"},
-        # {"name": "cpp_mu_plus_partitioned", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "fd_metrics_partitioned_test"},
-        # {"name": "cpp_mu_plus_simd_murmur", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
-        # {"name": "cpp_mu_plus_simd_xxhash", "function": cpp_mu_plus_opt, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
-        # {"name": "cpp_metrics_simd_murmur", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "murmur"},
-        # {"name": "cpp_metrics_simd_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "bucketing_simd_test", "algo": "xxhash"},
-        {"name": "cpp_metrics_ankerl_xxhash", "function": cpp_metrics, "is_cpp": True, "binary_name": "ankerl_test", "algo": "xxhash"},
-        # {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "clean"},
-        # {"name": "cpp_auto_relate", "function": cpp_auto_relate, "is_cpp": True, "binary_name": "auto_relate_test", "mode": "dirty"}
-        # {
-        #     "name": "cpp_mu_plus_bitmap",
-        #     "function": cpp_mu_plus_opt,
-        #     "language": "cpp",
-        #     "lhs": lhs_columns, 
-        #     "rhs": "rhs",
-        #     "algo": "bitmap"
-        # },
-        # {
-        #     "name": "cpp_mu_plus_hash",
-        #     "function": cpp_mu_plus_opt,
-        #     "language": "cpp",
-        #     "lhs": lhs_columns, 
-        #     "rhs": "rhs",
-        #     "algo": "hash"
-        # },
-    ]
-    
-    results = []
-    
-    for scenario in scenarios:        
-        datapath = get_dataset_path(scenario)
+    return run
 
+
+def run_benchmarks(scenarios: List[Dict[str, Any]], metrics_config: List[Dict[str, Any]] = None) -> pd.DataFrame:
+    if metrics_config is None:
+        metrics_config = BENCHMARK_METRIC_CONFIGS
+
+    results = []
+
+    for scenario in scenarios:
+        datapath = get_dataset_path(scenario)
         lhs_columns = [f"lhs_{i}" for i in range(scenario["lhs_number"])]
         rhs_column = "rhs"
-        
-        for config in metrics_config:            
-            print(f"Running scenario \"{scenario["name"]}\" with \"{config["name"]}\"\n")
+
+        for config in metrics_config:
+            print(f"Running scenario \"{scenario['name']}\" with \"{config['name']}\"\n")
+
+            extracted = run_metric(config["function"], config["build_kwargs"], config["field_map"],
+                                  (datapath, lhs_columns, rhs_column))
+            if extracted is None:
+                print(f"[{config['name']}] no result for scenario {scenario['name']}")
+                continue
+
+            row = {"scenario": scenario["name"], "implementation": config["name"], **extracted}
+
+            for f in ("mu_time_s", "rfi_time_s", "auto_relate_time_s", "independence_time_s"):
+                row[f] = row.get(f) or 0.0
+
+            round_fields = ["mu_plus", "rfi_prime_plus", "score", "violation_rate",
+                            "load_time_s", "build_time_s", "mu_time_s", "rfi_time_s",
+                            "auto_relate_time_s", "independence_time_s",
+                            "total_compute_time_s", "memory_used_mb"]
             
-            if config["is_cpp"]:
-                if config["function"] is cpp_auto_relate:
-                    stats = config["function"](
-                        csv_filepath = datapath, 
-                        lhs = lhs_columns, 
-                        rhs = rhs_column,
-                        binary_name = config["binary_name"],
-                        mode = config["mode"]
-                    )
-                else:
-                    stats = config["function"](
-                        csv_filepath = datapath, 
-                        lhs = lhs_columns, 
-                        rhs = rhs_column,
-                        binary_name = config["binary_name"],
-                        algo = config.get("algo", "auto"),
-                    )
-            else:
-                stats = run_python_metric(
-                    metric_func = config["function"], 
-                    csv_filepath = datapath,
-                    lhs = lhs_columns, 
-                    rhs = rhs_column
-                )
+            for f in round_fields:
+                if row.get(f) is not None:
+                    row[f] = round(row[f], 5)
 
-            if config["is_cpp"]:
-                mu_time = round(stats.get("mu_time_s", 0.0), 5)
-                rfi_time = round(stats.get("rfi_time_s", 0.0), 5)
-                compute_time = round(stats.get("compute_time_s", 0.0), 5)
-            else:
-                if "mu_plus" in config["name"]:
-                    mu_time = round(stats["compute_time_s"], 5)
-                    rfi_time = 0.0
-                elif "rfi" in config["name"]:
-                    mu_time = 0.0
-                    rfi_time = round(stats["compute_time_s"], 5)
-                else:
-                    mu_time = 0.0
-                    rfi_time = 0.0
-                compute_time = round(stats["compute_time_s"], 5)
-                
-            load_time = round(stats.get("load_time_s", 0), 5)
-            build_time = round(stats.get("build_time_s", 0), 5)
-            total_time = round(load_time + build_time + compute_time, 5)
-            memory_used = round(stats.get("memory_used_mb", 0), 5)
+            row["total_time_s"] = round(
+                (row.get("load_time_s") or 0.0) + 
+                (row.get("build_time_s") or 0.0) + 
+                (row.get("total_compute_time_s") or 0.0), 5
+            )
 
-            mu = stats.get("mu_plus")
-            rfi = stats.get("rfi_prime_plus")
+            results.append(row)
 
-            if "result_value" in stats:
-                if "mu_plus" in config["name"]:
-                    mu = stats["result_value"]
-                elif "rfi" in config["name"]:
-                    rfi = stats["result_value"]
-
-            if "result_value" in stats:
-                if "mu_plus" in config["name"]:
-                    mu = stats["result_value"]
-                elif "rfi" in config["name"]:
-                    rfi = stats["result_value"]
-
-            score = stats.get("score", stats.get("auto_relate_score"))
-            is_reliable = stats.get("is_reliable", stats.get("auto_relate_is_reliable"))
-            violation_count = stats.get("violation_count", stats.get("auto_relate_violation_count"))
-            violation_rate = stats.get("violation_rate", stats.get("auto_relate_violation_rate"))
-
-            results.append({
-                "scenario": scenario["name"],
-                "implementation": config["name"],
-                "mu_plus": round(mu, 5) if mu is not None else None,
-                "rfi_prime_plus": round(rfi, 5) if rfi is not None else None,
-                "score": round(score, 5) if score is not None else None,
-                "is_reliable": is_reliable,
-                "violation_count": violation_count,
-                "violation_rate": round(violation_rate, 5) if violation_rate is not None else None,
-                "independence_used": stats.get("independence_used"),
-                "independence_rejected": stats.get("independence_rejected"),
-                "independence_pvalue": stats.get("independence_pvalue"),
-                "load_time_s": load_time,
-                "build_time_s": build_time,
-                "mu_time_s": mu_time,
-                "rfi_time_s": rfi_time,
-                "auto_relate_time_s": stats.get("auto_relate_time_s"),
-                "independence_time_s": stats.get("independence_time_s"),
-                "total_compute_time_s": compute_time,
-                "total_time_s": total_time,
-                "memory_used_mb": memory_used,
-            })
-            
     save_results(results)
-    
     return results
 
 
 def violation_rate(row_count: int, violation_rows: list, threshold: float = 0.05):
     return len(violation_rows) / row_count > threshold
+
     
 def numeric_type(data: pd.DataFrame, left_col: str, right_col: str) -> bool:
     return (pd.api.types.is_numeric_dtype(data[left_col]) and pd.api.types.is_numeric_dtype(data[right_col]))
+
 
 def run_metric_fd_ground_truth(
     metric_config: Dict[str, Any],
@@ -386,10 +281,11 @@ def run_metric_fd_ground_truth(
                  numeric_type(df, left_col, right_col))):
                 continue
 
-            call_args = metric_config["build_kwargs"](filepath, left_col, right_col, violation_rows, mode)
-            stats = metric_config["function"](**call_args)
+            extracted = run_metric(metric_config["function"], metric_config["build_kwargs"],
+                                    metric_config["field_map"],
+                                    (filepath, left_col, right_col, violation_rows, mode))
 
-            if not stats:
+            if extracted is None:
                 print(f"[{metric_config['name']}] no result for {case_id}: {left_col} -> {right_col}")
                 continue
 
@@ -400,7 +296,8 @@ def run_metric_fd_ground_truth(
                 "sample_type": sample_type,
                 "implementation": metric_config["name"],
             }
-            row.update(get_fields(stats, metric_config["field_map"]))
+
+            row.update(extracted)            
             rows.append(row)
 
     results_df = pd.DataFrame(rows)
@@ -450,3 +347,95 @@ def print_fd_ground_truth_metrics(results_df: pd.DataFrame, threshold: float = 0
     print(f"Candidates scored: {len(scored)} / {len(results_df)}")
     print(f"TP = {tp}, FP = {fp}, FN = {fn}")
     print(f"Precision, Recall, F1 = ({precision}, {recall}, {f1})")
+
+
+AUTO_RELATE_FIELDS = {
+    "score": ["score", "auto_relate_score"],
+    "is_reliable": ["is_reliable", "auto_relate_is_reliable"],
+    "violation_count": ["violation_count", "auto_relate_violation_count"],
+    "violation_rate": ["violation_rate", "auto_relate_violation_rate"],
+    "independence_pvalue": ["independence_pvalue"],
+    "independence_used": ["independence_used"],
+    "independence_rejected": ["independence_rejected"],
+    "load_time_s": ["load_time_s"],
+    "build_time_s": ["build_time_s"],
+    "compute_time_s": ["compute_time_s"],
+}
+
+BENCHMARK_FIELDS = {
+    "mu_plus": ["mu_plus"],
+    "rfi_prime_plus": ["rfi_prime_plus"],
+    "score": ["score", "auto_relate_score"],
+    "is_reliable": ["is_reliable", "auto_relate_is_reliable"],
+    "violation_count": ["violation_count", "auto_relate_violation_count"],
+    "violation_rate": ["violation_rate", "auto_relate_violation_rate"],
+    "independence_used": ["independence_used"],
+    "independence_rejected": ["independence_rejected"],
+    "independence_pvalue": ["independence_pvalue"],
+    "load_time_s": ["load_time_s"],
+    "build_time_s": ["build_time_s"],
+    "mu_time_s": ["mu_time_s"],
+    "rfi_time_s": ["rfi_time_s"],
+    "auto_relate_time_s": ["auto_relate_time_s"],
+    "independence_time_s": ["independence_time_s"],
+    "total_compute_time_s": ["compute_time_s"],
+    "memory_used_mb": ["memory_used_mb"],
+}
+
+BENCHMARK_METRIC_CONFIGS = [
+    # {
+    #     "name": "py_mu_plus",
+    #     "function": python_metric_runner(mu_plus, "mu_plus", "mu_time_s"),
+    #     "build_kwargs": lambda datapath, lhs, rhs: {"csv_filepath": datapath, "lhs": lhs, "rhs": rhs},
+    #     "field_map": BENCHMARK_FIELDS,
+    # },
+    # {
+    #     "name": "py_rfi_prime_plus",
+    #     "function": python_metric_runner(reliable_fraction_of_information_prime_plus, "rfi_prime_plus", "rfi_time_s"),
+    #     "build_kwargs": lambda datapath, lhs, rhs: {"csv_filepath": datapath, "lhs": lhs, "rhs": rhs},
+    #     "field_map": BENCHMARK_FIELDS,
+    # },
+    {
+        "name": "cpp_metrics_ankerl_xxhash",
+        "function": run_cpp_binary,
+        "build_kwargs": lambda datapath, lhs, rhs: {
+            "binary_name": "ankerl_test",
+            "args": [datapath, "|".join(lhs), rhs, "xxhash"],
+            "stdin": "",
+        },
+        "field_map": BENCHMARK_FIELDS,
+    },
+    {
+        "name": "cpp_auto_relate_syn",
+        "function": run_cpp_binary,
+        "build_kwargs": lambda datapath, lhs, rhs: {
+            "binary_name": "auto_relate_test",
+            "args": [datapath, "|".join(lhs), rhs, "dirty"],
+            "stdin": "",
+        },
+        "field_map": BENCHMARK_FIELDS,
+    },
+]
+
+FD_GROUND_TRUTH_METRIC_CONFIG = [
+    {
+        "name": "cpp_auto_relate_fd",
+        "function": run_cpp_binary,
+        "field_map": AUTO_RELATE_FIELDS,
+        "build_kwargs": lambda filepath, left_col, right_col, violation_rows, mode: {
+            "binary_name": "auto_relate_test",
+            "args": [filepath, left_col, right_col, mode],
+            "stdin": format_violation_rows(violation_rows),
+        },
+    },
+    {
+        "name": "cpp_metrics_ankerl",
+        "function": run_cpp_binary,
+        "field_map": AUTO_RELATE_FIELDS,
+        "build_kwargs": lambda filepath, left_col, right_col, violation_rows, mode: {
+            "binary_name": "ankerl_test",
+            "args": [filepath, left_col, right_col, "xxhash", mode],
+            "stdin": format_violation_rows(violation_rows),
+        },
+    },
+]

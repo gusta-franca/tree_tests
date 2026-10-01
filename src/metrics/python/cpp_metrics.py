@@ -2,47 +2,22 @@ import json
 import subprocess
 
 
-def cpp_metrics(csv_filepath: str, lhs: list[str], rhs: str,  binary_name: str, algo: str = "auto"):
-    
-    binary_path = f"build/bin/{binary_name}" 
-    lhs_str = ",".join(lhs)
-    cmd = [binary_path, csv_filepath, lhs_str, rhs, algo]
-    result = subprocess.run(cmd, capture_output = True, text = True)
+def run_cpp_binary(binary_name: str, args: list, stdin: str = None) -> dict:
+    binary_path = f"build/bin/{binary_name}"
+    cmd = [binary_path] + [str(a) for a in args]
+    result = subprocess.run(cmd, input=stdin, capture_output=True, text=True)
 
     metrics = {}
-
-    for line in result.stdout.split('\n'):
-        if line.startswith("RESULT_JSON:"):
-            json_string = line.replace("RESULT_JSON:", "").strip()
-            metrics = json.loads(json_string)
-
-        # if line.startswith("HLL_JSON:"):
-        #     json_string = line.replace("HLL_JSON:", "").strip()
-        #     hll_data = json.loads(json_string)
-            
-        #     print(f"hll_xy : {hll_data['hll_xy_time_s']}s")
-        #     print(f"hll_col: {hll_data['hll_col_time_s']}s\n")
-            
-        # elif line.startswith("RESULT_JSON:"):
-        #     json_string = line.replace("RESULT_JSON:", "").strip()
-        #     metrics = json.loads(json_string)
-
-    return metrics;
-
-def cpp_auto_relate(csv_filepath: str, lhs: list[str], rhs: str, violation_rows: str, binary_name: str, mode: str = "dirty"):
-    lhs_str = ",".join(lhs)
-
-    # sending "r1,r2,r3" instead of "[r1, r2, r3]" to cpp
-    v_rows = violation_rows.strip("[]").replace(" ", "")
-    
-    binary_path = f"build/bin/{binary_name}" 
-    cmd = [binary_path, csv_filepath, lhs_str, rhs, mode]
-    result = subprocess.run(cmd, input = v_rows, capture_output = True, text = True)
-
-    metrics = {}
-
     for line in result.stdout.split('\n'):
         if line.startswith("RESULT_JSON:"):
             metrics = json.loads(line.replace("RESULT_JSON:", "").strip())
-    
-    return metrics;
+
+    if not metrics:
+        print(f"[{binary_name}] produced no RESULT_JSON "
+              f"(returncode={result.returncode})\nstderr:\n{result.stderr}")
+
+    return metrics
+
+
+def format_violation_rows(violation_rows: str) -> str:
+    return violation_rows.strip("[]").replace(" ", "")
