@@ -1,10 +1,12 @@
 #include <bit>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #define XXH_INLINE_ALL 1
 #include "ankerl/unordered_dense.h"
 #include "auto_relate.h"
 #include "metrics.h"
+#include "metrics_config.h"
 #include "simd_metrics.h"
 #include "xxhash.h"
 
@@ -46,7 +48,9 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
     xy_table.reserve(est_xy_card);
 
     // Kept per row so the auto relate's find_violation doesn't have to read every LHS column a second time.
+    #if ENABLE_AUTO_RELATE
     std::vector<XKey> row_x_keys(num_rows);
+    #endif
 
     for (size_t row = 0; row < num_rows; row++) {
         XYKey xy_key;
@@ -59,7 +63,10 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
 
         // Increments the current XY count if xy_key is already inserted on the hashtable; otherwise, inserts it with count = 1
         xy_table[xy_key]++;
+
+#if ENABLE_AUTO_RELATE
         std::copy(xy_key.begin(), xy_key.begin() + N, row_x_keys[row].begin());
+#endif
     }
 
     // Couting X and Y from XY
@@ -95,8 +102,13 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
                            (y_table.values().capacity() * sizeof(typename decltype(y_table)::value_type));
     size_t object_memory = sizeof(xy_table) + sizeof(x_table) + sizeof(y_table);
 
+#if ENABLE_AUTO_RELATE
     size_t row_x_keys_memory = row_x_keys.capacity() * sizeof(XKey);
     size_t bitset_memory = (num_rows + 7) / 8 + (data.columns.size() + 7) / 8; // is_violation + is_lhs
+#else
+    size_t row_x_keys_memory = 0;
+    size_t bitset_memory = 0;
+#endif
 
     peak_memory_b += bucket_memory + vector_memory + object_memory + row_x_keys_memory + bitset_memory;
 
@@ -106,7 +118,9 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
     double pdep_XY = 0.0;
     double shannon_XY = 0.0;
 
+#if ENABLE_AUTO_RELATE
     ankerl::unordered_dense::map<XKey, MajorityInfo, array_hash<N>> majority_per_x;
+#endif
 
     XKey x_key;
     for (const auto &[xy_key, xy_count] : xy_table) {
@@ -117,6 +131,7 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
         pdep_XY += (static_cast<double>(xy_count) * xy_count) / x_count;
         shannon_XY += xy_count * std::log2(static_cast<double>(xy_count) / x_count);
 
+#if ENABLE_AUTO_RELATE
         // Skips nulls (auto-relate only)
         bool lhs_has_null = std::any_of(x_key.begin(), x_key.end(), [](uint32_t v) { return v == ColumnarData::NULL_VALUE; });
         uint32_t y_id = xy_key[N];
@@ -124,20 +139,24 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
         if (!lhs_has_null && y_id != ColumnarData::NULL_VALUE) {
             auto &maj = majority_per_x[x_key];
             if (xy_count > maj.count ||
-                (xy_count == maj.count && maj.has_majority &&
-                 data.dicts[rhs_idx].at(y_id) < data.dicts[rhs_idx].at(maj.y_id))) {
+               (xy_count == maj.count && 
+                maj.has_majority &&
+                data.dicts[rhs_idx].at(y_id) < data.dicts[rhs_idx].at(maj.y_id))) {
                 maj.count = xy_count;
                 maj.y_id = y_id;
                 maj.has_majority = true;
             }
         }
+#endif
     }
 
+#if ENABLE_AUTO_RELATE
     size_t majority_bucket_memory = majority_per_x.bucket_count() * 8;
     size_t majority_vector_memory = majority_per_x.values().capacity() * sizeof(typename decltype(majority_per_x)::value_type);
     size_t majority_object_memory = sizeof(majority_per_x);
 
     peak_memory_b += majority_bucket_memory + majority_vector_memory + majority_object_memory;
+#endif
 
     pdep_XY = pdep_XY / static_cast<double>(num_rows);
     shannon_XY = -1.0 * (shannon_XY / num_rows);
@@ -152,6 +171,7 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
         x_counts.push_back(x_count);
     }
 
+#if ENABLE_AUTO_RELATE
     // Auxiliary vectors for auto-relate's stability score
     std::vector<uint32_t> majority_counts;
     std::vector<uint32_t> majority_y_ids;
@@ -201,8 +221,10 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
     double violation_rate = (num_rows > 0) ? static_cast<double>(violation_count) / num_rows : 0.0;
 
     std::vector<bool> is_lhs(data.columns.size(), false);
-    for (size_t idx : lhs_indices)
+    for (size_t idx : lhs_indices) {
         is_lhs[idx] = true;
+    }
+#endif
 
     double pdep_Y = 0.0;
     double shannon_Y = 0.0;
@@ -225,18 +247,31 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
     auto compute_end = std::chrono::steady_clock::now();
 
     // Compute metrics
+#if ENABLE_MU_PLUS
     auto mu_start = std::chrono::steady_clock::now();
     double mu = mu_plus(num_rows, dom_x_size, pdep_XY, pdep_Y);
     auto mu_end = std::chrono::steady_clock::now();
 
     std::chrono::duration<double> mu_time = (mu_end - mu_start);
+#else
+    double mu = std::numeric_limits<double>::quiet_NaN();
 
+    std::chrono::duration<double> mu_time(0);
+#endif
+
+#if ENABLE_RFI_PRIME_PLUS
     auto rfi_start = std::chrono::steady_clock::now();
     double rfi = rfi_prime_plus(num_rows, x_counts, y_counts, shannon_XY, shannon_Y);
     auto rfi_end = std::chrono::steady_clock::now();
 
     std::chrono::duration<double> rfi_time = (rfi_end - rfi_start);
+#else
+    double rfi = std::numeric_limits<double>::quiet_NaN();
 
+    std::chrono::duration<double> rfi_time(0);
+#endif
+
+#if ENABLE_AUTO_RELATE
     auto independence_start = std::chrono::steady_clock::now();
     IndependenceTestResult independence = independence_test(data, is_lhs, rhs_idx, is_violation, violation_count, violation_rate, config);
     auto independence_end = std::chrono::steady_clock::now();
@@ -245,6 +280,7 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
 
     auto auto_relate_start = std::chrono::steady_clock::now();
     AutoRelateResult ar;
+    
     if (independence.rejected) {
         ar.score = 1.0;
     }
@@ -255,9 +291,17 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
     ar.violation_count = violation_count;
     ar.violation_rate = violation_rate;
     auto auto_relate_end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> auto_relate_time = (auto_relate_end - auto_relate_start);
 
+    std::chrono::duration<double> auto_relate_time = (auto_relate_end - auto_relate_start);
+    
     bool ar_is_reliable = (ar.score <= config.perturbation_threshold);
+#else
+    IndependenceTestResult independence;
+    AutoRelateResult ar;
+    ar.score = std::numeric_limits<double>::quiet_NaN();
+    bool ar_is_reliable = false;
+    std::chrono::duration<double> independence_time(0), auto_relate_time(0);
+#endif
 
     total_compute_time += (compute_end - compute_start) + mu_time + rfi_time + independence_time + auto_relate_time;
 
