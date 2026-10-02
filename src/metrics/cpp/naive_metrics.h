@@ -6,6 +6,8 @@
 #include "fd_input.h"
 #include "metrics.h"
 
+namespace naive_metrics {
+
 struct MuPlusResult {
     double result = 0.0;
     bool is_key = false;
@@ -24,6 +26,24 @@ struct RfiPrimePlusResult {
     double compute_time_s = 0.0;
 };
 
+struct G1Result {
+    double result = 0.0;
+    double build_time_s = 0.0;
+    double compute_time_s = 0.0;
+};
+
+struct G2Result {
+    double result = 0.0;
+    double build_time_s = 0.0;
+    double compute_time_s = 0.0;
+};
+
+struct G3PrimeResult {
+    double result = 0.0;
+    double build_time_s = 0.0;
+    double compute_time_s = 0.0;
+};
+
 
 double pdep(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx);
 
@@ -32,8 +52,19 @@ double pdep_self(const ColumnarData& data, size_t rhs_idx);
 MuPlusResult mu_plus(const ColumnarData& data, const FDSpec& fd);
 
 
+// Distinct from the global ::expected_mi in metrics.cpp (same signature,
+// different namespace) — no name collision at link time.
 double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts);
 
 double fraction_of_information(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx);
 
 RfiPrimePlusResult rfi_prime_plus(const ColumnarData& data, const FDSpec& fd);
+
+
+G1Result g1(const ColumnarData& data, const FDSpec& fd);
+
+G2Result g2(const ColumnarData& data, const FDSpec& fd);
+
+G3PrimeResult g3_prime(const ColumnarData& data, const FDSpec& fd);
+
+} // namespace naive_metrics
