@@ -1,6 +1,6 @@
 import sys
 
-from src.benchmark.benchmark import prepare_datasets, run_benchmarks, run_fd_ground_truth_benchmark
+from src.benchmark.benchmark import prepare_datasets, run_benchmarks, run_benchmark_fd_ground_truth
 
 
 def main():
@@ -8,7 +8,7 @@ def main():
 
     if "fd" in sys.argv:
         data_type = "dirty_data" if "dirty" in sys.argv else "clean_data"
-        run_fd_ground_truth_benchmark(data_type = data_type)
+        run_benchmark_fd_ground_truth(data_type = data_type)
 
     else:
         prepare_datasets(scenarios, regenerate)
@@ -22,7 +22,7 @@ scenarios = [
         "tuples": 50_000,
         "tuple_sel": 0.1,
         "lhs_number": 3,
-        "rhs_sel": 0.01,
+        "rhs_sel": 0.1,
         "dist_params": {
             "dist_type": "zipf", 
             "lhs_dist_alpha": 1.01, 
@@ -36,9 +36,41 @@ scenarios = [
       {
         "name": "zipf_100k", 
         "tuples": 100_000,
-        "tuple_sel": 0.1,
+        "tuple_sel": 0.5,
         "lhs_number": 3,
-        "rhs_sel": 0.01,
+        "rhs_sel": 0.5,
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_250k", 
+        "tuples": 250_000,
+        "tuple_sel": 0.5,
+        "lhs_number": 7,
+        "rhs_sel": 0.5, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_500k", 
+        "tuples": 500_000,
+        "tuple_sel": 0.2,
+        "lhs_number": 7,
+        "rhs_sel": 0.5, 
         "dist_params": {
             "dist_type": "zipf", 
             "lhs_dist_alpha": 1.01, 

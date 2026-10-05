@@ -63,6 +63,9 @@ int main(int argc, char* argv[]) {
           << "\"independence_used\": " << (result.independence_used ? "true" : "false") << ", "
           << "\"independence_rejected\": " << (result.independence_rejected ? "true" : "false") << ", "
           << "\"independence_pvalue\": " << result.independence_pvalue << ", "
+          << "\"g1_score\": " << result.g1_score << ", "
+          << "\"g2_score\": " << result.g2_score << ", "
+          << "\"g3_prime_score\": " << result.g3_prime_score << ", "
           << "\"load_time_s\": " << load_time_s.count() << ", "
           << "\"build_time_s\": " << result.build_time_s << ", "
           << "\"compute_time_s\": " << result.compute_time_s << ", "
@@ -70,6 +73,9 @@ int main(int argc, char* argv[]) {
           << "\"rfi_time_s\": " << result.rfi_compute_time_s << ", "
           << "\"auto_relate_time_s\": " << result.auto_relate_compute_time_s << ", "
           << "\"independence_time_s\": " << result.independence_compute_time_s << ", "
+          << "\"g1_time_s\": " << result.g1_compute_time_s << ", "
+          << "\"g2_time_s\": " << result.g2_compute_time_s << ", "
+          << "\"g3_prime_time_s\": " << result.g3_prime_compute_time_s << ", "
           << "\"memory_used_mb\": " << result.memory_used_mb
           << "}" << std::endl;
 

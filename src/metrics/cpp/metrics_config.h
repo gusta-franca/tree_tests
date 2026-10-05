@@ -12,3 +12,15 @@
 #ifndef ENABLE_AUTO_RELATE
 #define ENABLE_AUTO_RELATE 1
 #endif
+
+#ifndef ENABLE_G1
+#define ENABLE_G1 1
+#endif
+
+#ifndef ENABLE_G2
+#define ENABLE_G2 1
+#endif
+
+#ifndef ENABLE_G3_PRIME
+#define ENABLE_G3_PRIME 1
+#endif

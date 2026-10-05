@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
 
     std::string v_rows_str;
     std::getline(std::cin, v_rows_str);
-    std::vector<int> violation_rows = parse_violation_rows(v_rows_str);  // now from auto_relate.h/.cpp, not redefined here
+    std::vector<int> violation_rows = parse_violation_rows(v_rows_str);
 
     AutoRelateFDConfig config;
     config.dirty_data = (mode == "dirty");
@@ -45,6 +45,7 @@ int main(int argc, char* argv[]) {
     load_time_s = (load_end - load_start);
 
     AutoRelateFDResult result = compute_auto_relate_fd(data, left_cols, right_col, violation_rows, config);
+    
 
     std::string left_cols_str;
     for (size_t i = 0; i < result.left_cols.size(); i++) {

@@ -16,12 +16,19 @@ struct Results {
     bool independence_rejected;
     double independence_pvalue;
 
+    double g1_score;
+    double g2_score;
+    double g3_prime_score;
+
     double build_time_s;
     double compute_time_s;
     double mu_compute_time_s;
     double rfi_compute_time_s;
     double auto_relate_compute_time_s;
     double independence_compute_time_s;
+    double g1_compute_time_s;
+    double g2_compute_time_s;
+    double g3_prime_compute_time_s;
     double memory_used_mb;
 };
 

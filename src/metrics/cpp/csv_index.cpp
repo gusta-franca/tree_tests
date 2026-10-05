@@ -57,7 +57,9 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
     using clock = std::chrono::steady_clock;
     auto t_start = clock::now();
 
-    csv::CSVReader reader(filename);
+    csv::CSVFormat format;
+    format.delimiter(',');
+    csv::CSVReader reader(filename, format);
 
     for (auto& col_name : reader.get_col_names()) {
         data.column_names.push_back(col_name);
@@ -134,7 +136,6 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, bool ver
     return true;
 }
 
-// need adapting so it can be used to compute auto-relate (i.e. dict encoding)
 bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FDSpec& fd, size_t& est_xy_card, bool verbose) {
     // std::chrono::duration<double> hll_build_time(0);
     // std::chrono::duration<double> hll_est_time(0);    
@@ -142,7 +143,9 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
     using clock = std::chrono::steady_clock;
     auto t_start = clock::now();
     
-    csv::CSVReader reader(filename);
+    csv::CSVFormat format;
+    format.delimiter(',');
+    csv::CSVReader reader(filename, format);
 
     for (auto& col_name : reader.get_col_names()) {
         data.column_names.push_back(col_name);
@@ -165,6 +168,7 @@ bool load_csv_columnar(const std::string& filename, ColumnarData& data, const FD
     
         if (idx == SIZE_MAX) {
             std::cerr << "load_csv_columnar: LHS column not found: " << name << std::endl;
+            
             return false;
         }
         
