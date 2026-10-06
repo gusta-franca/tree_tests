@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> left_cols;
     std::stringstream lhs_ss(lhs_str);
     std::string col;
-    while (std::getline(lhs_ss, col, ',')) {
+    while (std::getline(lhs_ss, col, '|')) {
         left_cols.push_back(col);
     }
 

@@ -52,8 +52,6 @@ double pdep_self(const ColumnarData& data, size_t rhs_idx);
 MuPlusResult mu_plus(const ColumnarData& data, const FDSpec& fd);
 
 
-// Distinct from the global ::expected_mi in metrics.cpp (same signature,
-// different namespace) — no name collision at link time.
 double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts);
 
 double fraction_of_information(const ColumnarData& data, const std::vector<size_t>& lhs_indices, size_t rhs_idx);
