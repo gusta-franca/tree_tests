@@ -241,7 +241,7 @@ double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const
 
     for (uint32_t a : x_counts) {
         for (uint32_t b : y_counts) {
-            m += expected_mi_pair(n, static_cast<int>(a), static_cast<int>(b), lgamma_cache);
+            m += expected_mi_pair(n, static_cast<int>(a), static_cast<int>(b), lgamma);
         }
     }
 

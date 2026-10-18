@@ -100,6 +100,7 @@ def prepare_datasets(scenarios: List[Dict[str, Any]], regenerate: bool = False):
         if not os.path.exists(dataset_path) or regenerate:
             gen_args = get_generation_args(scenario)
             df = generate_SYN(gen_args)
+            # plot_rank_frequency(df)
             
             df.to_csv(dataset_path, index = False)
             print(f"Saved dataset on {dataset_path}")

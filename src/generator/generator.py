@@ -29,8 +29,6 @@ def generate_tuples(settings: Dict[str, Any]) -> pd.DataFrame:
     
     df = df.merge(unique_lhs, on = "tuple_id", how = "left")
     
-    # plot_rank_frequency(df)
-
     lhs_number = settings["lhs_number"]
     
     # Splits the tuple id into multiple columns if there is more than 1 LHS attribute

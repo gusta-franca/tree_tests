@@ -1,36 +1,49 @@
-import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
-def plot_rank_frequency(df: pd.DataFrame, save_path: str = None, show: bool = True):
+def plot_rank_frequency(df: pd.DataFrame, bins: int = 50, log_scale: bool = True, title: str = None):
+    lhs_columns = [c for c in df.columns if c != "rhs"]
 
-    num_cols = len(df.columns)
-    
-    fig, axes = plt.subplots(1, num_cols, figsize=(6 * num_cols, 5))
-    
-    if num_cols == 1:
-        axes = [axes]
-        
-    for i, col in enumerate(df.columns):
-        counts = df[col].value_counts().values
-        ranks = range(1, len(counts) + 1)
-        
-        axes[i].plot(ranks, counts, marker='.', linestyle='none', markersize=4, color='royalblue')
-        
-        axes[i].set_title(f'Rank-Frequency: {col}')
-        axes[i].set_xlabel('Rank (Log Scale)')
-        axes[i].set_ylabel('Frequency (Log Scale)')
-        
-        axes[i].set_xscale('log')
-        axes[i].set_yscale('log')
-        axes[i].grid(True, which="both", ls="--", alpha=0.5)
-        
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path)
-        print(f"Plot saved successfully to '{save_path}'")
-        
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
+    lhs_counts = df.groupby(lhs_columns).size().sort_values(ascending=False)
+    rhs_counts = df["rhs"].value_counts().sort_values(ascending=False)
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+
+    ax = axes[0, 0]
+    ax.plot(np.arange(1, len(lhs_counts) + 1), lhs_counts.values, marker=".", linestyle="none")
+    ax.set_xlabel("LHS group rank")
+    ax.set_ylabel("row count")
+    ax.set_title("LHS group size by rank")
+    if log_scale:
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+
+    ax = axes[0, 1]
+    ax.hist(lhs_counts.values, bins=bins)
+    ax.set_xlabel("rows per LHS group")
+    ax.set_ylabel("number of LHS groups")
+    ax.set_title("LHS group size distribution")
+
+    ax = axes[1, 0]
+    ax.plot(np.arange(1, len(rhs_counts) + 1), rhs_counts.values, marker=".", linestyle="none")
+    ax.set_xlabel("RHS value rank")
+    ax.set_ylabel("row count")
+    ax.set_title("RHS value frequency by rank")
+    if log_scale:
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+
+    ax = axes[1, 1]
+    ax.hist(rhs_counts.values, bins=bins)
+    ax.set_xlabel("rows per RHS value")
+    ax.set_ylabel("number of RHS values")
+    ax.set_title("RHS value frequency distribution")
+
+    if title:
+        fig.suptitle(title)
+
+    fig.tight_layout()
+    plt.show()
+
+    return fig
