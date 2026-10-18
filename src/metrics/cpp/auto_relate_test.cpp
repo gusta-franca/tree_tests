@@ -5,6 +5,8 @@
 
 #include "auto_relate.h"
 #include "csv_index.h"
+#include "metrics_config.h"
+#include "sampling.h"
 
 int main(int argc, char* argv[]) {
     if (argc < 4) {
@@ -41,6 +43,20 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+#if ENABLE_SAMPLING
+    if (data.num_rows > SAMPLE_THRESHOLD) {
+        std::optional<uint64_t> seed;
+
+        if (const char* s = std::getenv("SAMPLE_SEED")) {
+            seed = std::stoull(s);
+        }
+
+        SampleResult res = sample_columnar_data(data, violation_rows, SAMPLE_SIZE, seed);
+        data = std::move(res.data);
+        violation_rows = std::move(res.violation_rows);
+    }
+#endif
+
     auto load_end = std::chrono::steady_clock::now();
     load_time_s = (load_end - load_start);
 
@@ -68,7 +84,8 @@ int main(int argc, char* argv[]) {
               << "\"violation_rate\": " << result.violation_rate << ", "
               << "\"load_time_s\": " << load_time_s.count() << ", "
               << "\"build_time_s\": " << result.build_time_s << ", "
-              << "\"compute_time_s\": " << result.compute_time_s
+              << "\"compute_time_s\": " << result.compute_time_s << ", "
+              << "\"memory_used_mb\": " << result.memory_used_mb
               << "}" << std::endl;
 
     return 0;

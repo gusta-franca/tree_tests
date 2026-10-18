@@ -29,11 +29,6 @@ struct GroupValues {
     }
 };
 
-struct ViolationTestResult {
-    std::vector<bool> is_violation;
-    size_t violation_count = 0;
-};
-
 std::vector<uint32_t> build_lhs_key(const ColumnarData& data, const std::vector<size_t>& lhs_idxs) {
     const size_t n = data.num_rows;
     std::vector<uint32_t> lhs_group(n);
@@ -180,6 +175,16 @@ ViolationTestResult find_violations(
                 }
             }
         }
+
+        size_t bucket_memory = groups_rows.bucket_count() * 8;
+        size_t values_memory = groups_rows.values().capacity() * sizeof(typename decltype(groups_rows)::value_type);
+        size_t rows_memory = 0;
+
+        for (const auto& [left_value, rows] : groups_rows) {
+            rows_memory += rows.capacity() * sizeof(uint32_t);
+        }
+
+        result.memory_b = bucket_memory + values_memory + rows_memory + sizeof(groups_rows);
     } 
     else {
         for (int idx : violation_rows) {
@@ -215,6 +220,7 @@ IndependenceTestResult independence_test(
     }
 
     const size_t n = data.num_rows;
+    size_t max_column_memory_b = 0;
 
     // applies the independence test for every column not in the FD
     for (size_t c = 0; c < data.columns.size(); c++) {
@@ -223,18 +229,24 @@ IndependenceTestResult independence_test(
         double pvalue = independence_pvalue(data, c, is_violation, n);
         result.pvalue = pvalue;
 
+        size_t card = data.get_distinct_count(c);
+        size_t column_memory_b = card * sizeof(uint32_t) * 2;
+        max_column_memory_b = std::max(max_column_memory_b, column_memory_b);
+
         if (pvalue < config.significance_threshold) {
             result.rejected = true;
-            
+            result.memory_b = max_column_memory_b;
+
             return result;
         }
     }
 
+    result.memory_b = max_column_memory_b;
     return result;
 }
 
 
-double stability_test(
+StabilityTestResult stability_test(
     const ColumnarData& data,
     const std::vector<uint32_t>& lhs_group,
     size_t right_idx,
@@ -294,7 +306,19 @@ double stability_test(
         perturbation_score = sum / static_cast<double>(left_value_count);
     }
 
-    return 1.0 - perturbation_score;
+    size_t bucket_memory = groups.bucket_count() * 8;
+    size_t values_memory = groups.values().capacity() * sizeof(typename decltype(groups)::value_type);
+    size_t groups_memory = 0;
+
+    for (const auto& [left_value, group] : groups) {
+        groups_memory += group.distinct_values.capacity() * sizeof(uint32_t) + group.counts.capacity() * sizeof(uint64_t);
+    }
+
+    StabilityTestResult result;
+    result.score = 1.0 - perturbation_score;
+    result.memory_b = bucket_memory + values_memory + groups_memory + sizeof(groups);
+
+    return result;
 }
 
 
@@ -348,10 +372,15 @@ AutoRelateFDResult compute_auto_relate_fd(
     result.violation_rate = (n > 0) ? static_cast<double>(violations.violation_count) / n : 0.0;
     result.build_time_s = std::chrono::duration<double>(build_end - build_start).count();
 
+    size_t baseline_memory_b = lhs_group.capacity() * sizeof(uint32_t)
+                              + (violations.is_violation.capacity() + 7) / 8
+                              + sizeof(lhs_group) + sizeof(violations.is_violation);
+
     auto compute_start = clock::now();
 
-    IndependenceTestResult independence = independence_test(data, is_lhs, right_idx, violations.is_violation,
-                                                            violations.violation_count, result.violation_rate, config);
+    IndependenceTestResult independence = independence_test(data, is_lhs, right_idx, 
+                                                            violations.is_violation, violations.violation_count, 
+                                                            result.violation_rate, config);
 
     result.independence_used = independence.used;
     result.independence_rejected = independence.rejected;
@@ -360,6 +389,8 @@ AutoRelateFDResult compute_auto_relate_fd(
     if (independence.rejected) {
         result.score = 1.0;
         result.is_reliable = false;
+        result.memory_used_mb = (baseline_memory_b + std::max(violations.memory_b, independence.memory_b))
+                               / (1024.0 * 1024.0);
 
         auto compute_end = clock::now();
         result.compute_time_s = std::chrono::duration<double>(compute_end - compute_start).count();
@@ -367,8 +398,11 @@ AutoRelateFDResult compute_auto_relate_fd(
         return result;
     }
 
-    result.score = stability_test(data, lhs_group, right_idx, violations.is_violation);
+    StabilityTestResult stability = stability_test(data, lhs_group, right_idx, violations.is_violation);
+    result.score = stability.score;
     result.is_reliable = (result.score <= config.perturbation_threshold);
+    result.memory_used_mb = (baseline_memory_b + std::max({violations.memory_b, independence.memory_b, stability.memory_b}))
+                           / (1024.0 * 1024.0);
 
     auto compute_end = clock::now();
     result.compute_time_s = std::chrono::duration<double>(compute_end - compute_start).count();

@@ -41,12 +41,25 @@ struct AutoRelateFDResult {
 
     double build_time_s = 0.0;   // accuracy test?
     double compute_time_s = 0.0; // independence test + stability score?
+    double memory_used_mb = 0.0;
+};
+
+struct ViolationTestResult {
+    std::vector<bool> is_violation;
+    size_t violation_count = 0;
+    size_t memory_b = 0;
 };
 
 struct IndependenceTestResult {
     bool used = false;
     bool rejected = false;
     double pvalue = -1.0;
+    size_t memory_b = 0;
+};
+
+struct StabilityTestResult {
+    double score;
+    size_t memory_b = 0;
 };
 
 // compute Auto-Relate's FD reliability score for one candidate (only FDs in the format left_col -> right_col)
