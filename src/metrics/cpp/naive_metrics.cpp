@@ -235,8 +235,9 @@ double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const
     int n = static_cast<int>(num_rows);
     double m = 0.0;
 
-    std::vector<double> lgamma_cache(n + 1);
-    for (int i = 0; i <= n; i++) lgamma_cache[i] = std::lgamma(i + 1);
+    auto lgamma_at = [](int x) {
+        return std::lgamma(x + 1);
+    };
 
     for (uint32_t a : x_counts) {
         for (uint32_t b : y_counts) {

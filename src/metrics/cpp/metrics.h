@@ -1,7 +1,9 @@
 #pragma once
-#include <vector>
-#include <cstdint>
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <vector>
 
 struct Results {
     double mu_plus;
@@ -41,7 +43,38 @@ struct AutoRelateResult {
 double mu_plus(size_t num_rows, size_t dom_x_size, double pdep_XY, double pdep_Y);
 
 // e_mi for a single (a, b) pair; exposed so naive metrics can use it oo
-double expected_mi_pair(int n, int a, int b, const std::vector<double>& lgamma_cache);
+template <typename lgammaT>
+double expected_mi_pair(int n, int a, int b, lgammaT&& lgamma) {
+    double log_comb_n_a = lgamma(n) - lgamma(a) - lgamma(n - a);
+
+    int k0 = std::max(0, a + b - n);
+    int k_max = std::min(a, b);
+
+    double log_p0 = (lgamma(b) - lgamma(k0) - lgamma(b - k0))
+                  + (lgamma(n - b) - lgamma(a - k0) - lgamma(n - a - b + k0))
+                  - log_comb_n_a;
+
+    double p0 = std::exp(log_p0);
+    double e_mi = 0.0;
+
+    if (k0 != 0) {
+        double k0_d = static_cast<double>(k0);
+        e_mi += p0 * (k0_d / n) * std::log2((k0_d * n) / (static_cast<double>(a) * b));
+    }
+
+    for (int k1 = k0 + 1; k1 <= k_max; k1++) {
+        double k0_d = static_cast<double>(k0);
+        double k1_d = static_cast<double>(k1);
+
+        p0 *= ((static_cast<double>(a) - k0_d) * (static_cast<double>(b) - k0_d)) /
+              (k1_d * (static_cast<double>(n) - a - b + k1_d));
+
+        e_mi += p0 * (k1_d / n) * std::log2((k1_d * n) / (static_cast<double>(a) * b));
+        k0 = k1;
+    }
+
+    return e_mi;
+}
 
 double rfi_prime_plus(size_t num_rows, const std::vector<uint32_t>& x_counts, const std::vector<uint32_t>& y_counts, double shannon_XY, double shannon_Y);
 

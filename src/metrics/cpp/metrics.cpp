@@ -63,6 +63,10 @@ double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const
         lgamma_cache[i] = std::lgamma(i + 1);
     }
 
+    auto lgamma = [&lgamma_cache](int x) {
+        return lgamma_cache[x];
+    };
+
     // compress the zipf long tail
     std::unordered_map<int, uint64_t> x_c;
     for (int a : x_counts) {
@@ -82,20 +86,9 @@ double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const
     // parallel: spawn threads (?)
     // for: divide x_freq[0..x_freq_size] evenly for all threads
     // reduction(+:m): stitch results together in m (?)
-    /// is the overhead time taken being considered on the results? 
-
-    // compare FD throughput between inter-parallelism and intra-prallelism
-    // implement microsoft metric; test with their datasets
-    // register every feature implemented as a journal
-    // test if order of LHS attributes matter for computing the metrics/building the hash tables
-    // compare HLL usage vs. counting HLL usage, when is one better than the other?
-
     #pragma omp parallel for reduction(+:m)
     for (size_t i = 0; i < x_freq_size; i++) {
-        int a = x_freq[i].first;
-        uint64_t a_freq = x_freq[i].second;
-        
-        double log_comb_n_a = lgamma_cache[n] - lgamma_cache[a] - lgamma_cache[n - a];
+        int a = x_freq[i].first;        
 
         // maybe omp for y too? is creating a vector and iterating over it (like with x) better? needs testing
         for (const auto& y_pair : y_freq) {
