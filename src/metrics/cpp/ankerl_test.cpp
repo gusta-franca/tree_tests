@@ -9,6 +9,8 @@
 #include "auto_relate.h"
 #include "csv_index.h"
 #include "fd_input.h"
+#include "metrics_config.h"
+#include "sampling.h"
 
 
 int main(int argc, char* argv[]) {
@@ -47,6 +49,20 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: Failed to load CSV file" << std::endl;
         return 1;
     }
+
+#if ENABLE_SAMPLING
+    if (data.num_rows > SAMPLE_THRESHOLD) {
+        std::optional<uint64_t> seed;
+
+        if (const char* s = std::getenv("SAMPLE_SEED")) {
+            seed = std::stoull(s);
+        }
+
+        SampleResult res = sample_columnar_data(data, violation_rows, SAMPLE_SIZE, seed);
+        data = std::move(res.data);
+        violation_rows = std::move(res.violation_rows);
+    }
+#endif
 
     auto load_end = std::chrono::steady_clock::now();
     load_time_s = (load_end - load_start);

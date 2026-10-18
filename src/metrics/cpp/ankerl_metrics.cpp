@@ -223,6 +223,8 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
         majority_y_ids.push_back(maj.y_id);
     }
 
+    peak_memory_b += majority_counts.capacity()*sizeof(uint32_t) + majority_y_ids.capacity()*sizeof(uint32_t);
+
     // find_violations()
     std::vector<bool> is_violation(num_rows, false);
     size_t violation_count = 0;
@@ -279,6 +281,8 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
     pdep_Y = pdep_Y / (static_cast<double>(num_rows) * num_rows);
     shannon_Y = -1.0 * (shannon_Y / num_rows);
 
+     peak_memory_b += x_counts.capacity()*sizeof(uint32_t) + y_counts.capacity()*sizeof(uint32_t);
+
     size_t dom_x_size = x_table.size();
 
     auto compute_end = std::chrono::steady_clock::now();
@@ -315,6 +319,8 @@ Results execute(const ColumnarData &data, const std::vector<size_t> &lhs_indices
 
     std::chrono::duration<double> independence_time = (independence_end - independence_start);
 
+    peak_memory_b += independence.memory_b
+    
     auto auto_relate_start = std::chrono::steady_clock::now();
     AutoRelateResult ar;
 
