@@ -2,8 +2,7 @@ __pycache__/
 .vscode/
 backup/
 build/
+configs/
 data/
 papers/
 results/
-
-main_*.py

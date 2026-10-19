@@ -6,11 +6,11 @@ import time
 import tracemalloc
 from typing import Any, Dict, List
 
-from python.metrics.adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
-from python.metrics.mu_plus_opt import mu_plus_opt
-from python.metrics.cpp_metrics import run_cpp_binary, format_violation_rows
-from python.benchmark.plot import plot_rank_frequency
-from python.generator.generator import generate_SYN 
+from src.python.metrics.adapted_paper_metrics import mu_plus, reliable_fraction_of_information_prime_plus
+from src.python.metrics.mu_plus_opt import mu_plus_opt
+from src.python.metrics.cpp_metrics import run_cpp_binary, format_violation_rows
+from src.python.benchmark.plot import plot_rank_frequency
+from src.python.generator.generator import generate_SYN 
 
 
 def get_fields(stats: dict, fields: Dict[str, List[str]]) -> dict:
