@@ -69,31 +69,29 @@ int main(int argc, char* argv[]) {
 
     Results result = compute_metrics(data, fd, algo, est_xy_card, config, violation_rows);
 
-    std::cout << "RESULT_JSON: {"
-          << "\"mu_plus\": " << result.mu_plus << ", "
-          << "\"rfi_prime_plus\": " << result.rfi_prime_plus << ", "
-          << "\"auto_relate_score\": " << result.auto_relate_score << ", "
-          << "\"auto_relate_violation_count\": " << result.auto_relate_violation_count << ", "
-          << "\"auto_relate_violation_rate\": " << result.auto_relate_violation_rate << ", "
-          << "\"auto_relate_is_reliable\": " << (result.auto_relate_is_reliable ? "true" : "false") << ", "
-          << "\"independence_used\": " << (result.independence_used ? "true" : "false") << ", "
-          << "\"independence_rejected\": " << (result.independence_rejected ? "true" : "false") << ", "
-          << "\"independence_pvalue\": " << result.independence_pvalue << ", "
-          << "\"g1_score\": " << result.g1_score << ", "
-          << "\"g2_score\": " << result.g2_score << ", "
-          << "\"g3_prime_score\": " << result.g3_prime_score << ", "
-          << "\"load_time_s\": " << load_time_s.count() << ", "
-          << "\"build_time_s\": " << result.build_time_s << ", "
-          << "\"compute_time_s\": " << result.compute_time_s << ", "
-          << "\"mu_time_s\": " << result.mu_compute_time_s << ", "
-          << "\"rfi_time_s\": " << result.rfi_compute_time_s << ", "
-          << "\"auto_relate_time_s\": " << result.auto_relate_compute_time_s << ", "
-          << "\"independence_time_s\": " << result.independence_compute_time_s << ", "
-          << "\"g1_time_s\": " << result.g1_compute_time_s << ", "
-          << "\"g2_time_s\": " << result.g2_compute_time_s << ", "
-          << "\"g3_prime_time_s\": " << result.g3_prime_compute_time_s << ", "
-          << "\"memory_used_mb\": " << result.memory_used_mb
-          << "}" << std::endl;
+    metric("MuPlus", result.mu_plus);
+    metric("RfiPrimePlus", result.rfi_prime_plus);
+    metric("AutoRelateScore", result.auto_relate_score);
+    metric("AutoRelateViolationCount", result.auto_relate_violation_count);
+    metric("AutoRelateViolationRate", result.auto_relate_violation_rate);
+    metric("AutoRelateIsReliable", result.auto_relate_is_reliable ? "true" : "false");
+    metric("IndependenceUsed", result.independence_used ? "true" : "false");
+    metric("IndependenceRejected", result.independence_rejected ? "true" : "false");
+    metric("IndependencePvalue", result.independence_pvalue);
+    metric("G1Score", result.g1_score);
+    metric("G2Score", result.g2_score);
+    metric("G3PrimeScore", result.g3_prime_score);
+    metric("LoadTimeSeconds", load_time_s.count());
+    metric("BuildTimeSeconds", result.build_time_s);
+    metric("ComputeTimeSeconds", result.compute_time_s);
+    metric("MuTimeSeconds", result.mu_compute_time_s);
+    metric("RfiTimeSeconds", result.rfi_compute_time_s);
+    metric("AutoRelateTimeSeconds", result.auto_relate_compute_time_s);
+    metric("IndependenceTimeSeconds", result.independence_compute_time_s);
+    metric("G1TimeSeconds", result.g1_compute_time_s);
+    metric("G2TimeSeconds", result.g2_compute_time_s);
+    metric("G3PrimeTimeSeconds", result.g3_prime_compute_time_s);
+    metric("InternalMemoryEstimateMB", result.memory_used_mb);
 
     return 0;
 }

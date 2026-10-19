@@ -5,6 +5,7 @@
 
 #include "auto_relate.h"
 #include "core/csv_index.h"
+#include "core/metrics.h"
 #include "core/metrics_config.h"
 #include "core/sampling.h"
 
@@ -72,21 +73,19 @@ int main(int argc, char* argv[]) {
         left_cols_str += result.left_cols[i];
     }
 
-    std::cout << "RESULT_JSON: {"
-              << "\"left_cols\": \"" << left_cols_str << "\", "
-              << "\"right_col\": \"" << result.right_col << "\", "
-              << "\"score\": " << result.score << ", "
-              << "\"independence_pvalue\": " << result.independence_pvalue << ", "
-              << "\"independence_used\": " << result.independence_used << ", "
-              << "\"independence_rejected\": " << result.independence_rejected << ", "
-              << "\"is_reliable\": " << (result.is_reliable ? "true" : "false") << ", "
-              << "\"violation_count\": " << result.violation_count << ", "
-              << "\"violation_rate\": " << result.violation_rate << ", "
-              << "\"load_time_s\": " << load_time_s.count() << ", "
-              << "\"build_time_s\": " << result.build_time_s << ", "
-              << "\"compute_time_s\": " << result.compute_time_s << ", "
-              << "\"memory_used_mb\": " << result.memory_used_mb
-              << "}" << std::endl;
+    metric("LeftCols", left_cols_str);
+    metric("RightCol", result.right_col);
+    metric("Score", result.score);
+    metric("IndependencePvalue", result.independence_pvalue);
+    metric("IndependenceUsed", result.independence_used ? "true" : "false");
+    metric("IndependenceRejected", result.independence_rejected ? "true" : "false");
+    metric("IsReliable", result.is_reliable ? "true" : "false");
+    metric("ViolationCount", result.violation_count);
+    metric("ViolationRate", result.violation_rate);
+    metric("LoadTimeSeconds", load_time_s.count());
+    metric("BuildTimeSeconds", result.build_time_s);
+    metric("ComputeTimeSeconds", result.compute_time_s);
+    metric("InternalMemoryEstimateMB", result.memory_used_mb);
 
     return 0;
 }
