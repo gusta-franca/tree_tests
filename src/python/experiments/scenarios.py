@@ -1,0 +1,295 @@
+"""
+Define every scenario (syn dataset configuration) to be generated and tested against
+"""
+
+scenarios = [
+    {
+        "name": "zipf_50k", 
+        "tuples": 50_000,
+        "tuple_sel": 0.3,
+        "lhs_number": 3,
+        "rhs_sel": 0.1,
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+#         {
+#         "name": "zipf_50k", 
+#         "tuples": 50_000,
+#         "tuple_sel": 0.1,
+#         "lhs_number": 3,
+#         "rhs_sel": 0.1,
+#         "dist_params": {
+#             "dist_type": "beta", 
+#             "lhs_dist_alpha": 5, 
+#             "lhs_dist_beta": 2, 
+#             "rhs_dist_alpha": 5, 
+#             "rhs_dist_beta": 2,
+#             "noise": 0.01,
+#             "n_type": "copy",
+#         }
+#     },
+#         {
+#         "name": "zipf_50k", 
+#         "tuples": 50_000,
+#         "tuple_sel": 0.1,
+#         "lhs_number": 3,
+#         "rhs_sel": 0.1,
+#         "dist_params": {
+#             "dist_type": "beta", 
+#             "lhs_dist_alpha": 8, 
+#             "lhs_dist_beta": 2, 
+#             "rhs_dist_alpha": 8, 
+#             "rhs_dist_beta": 2,
+#             "noise": 0.01,
+#             "n_type": "copy",
+#         }
+#     },
+#     {
+#         "name": "zipf_50k", 
+#         "tuples": 50_000,
+#         "tuple_sel": 0.1,
+#         "lhs_number": 3,
+#         "rhs_sel": 0.1,
+#         "dist_params": {
+#             "dist_type": "beta", 
+#             "lhs_dist_alpha": 0.3, 
+#             "lhs_dist_beta": 0.3, 
+#             "rhs_dist_alpha": 0.3, 
+#             "rhs_dist_beta": 0.3,
+#             "noise": 0.1,
+#             "n_type": "copy",
+#         }
+#     },    
+#     {
+#         "name": "zipf_50k", 
+#         "tuples": 50_000,
+#         "tuple_sel": 0.1,
+#         "lhs_number": 3,
+#         "rhs_sel": 0.1,
+#         "dist_params": {
+#             "dist_type": "beta", 
+#             "lhs_dist_alpha": 8, 
+#             "lhs_dist_beta": 2, 
+#             "rhs_dist_alpha": 8, 
+#             "rhs_dist_beta": 2,
+#             "noise": 0.01,
+#             "n_type": "copy",
+#         }
+#     },
+# {
+#         "name": "zipf_50k", 
+#         "tuples": 50_000,
+#         "tuple_sel": 0.1,
+#         "lhs_number": 3,
+#         "rhs_sel": 0.1,
+#         "dist_params": {
+#             "dist_type": "beta", 
+#             "lhs_dist_alpha": 0.5, 
+#             "lhs_dist_beta": 3, 
+#             "rhs_dist_alpha": 0.5, 
+#             "rhs_dist_beta": 3,
+#             "noise": 0.01,
+#             "n_type": "copy",
+#         }
+#     },
+    {
+        "name": "zipf_100k", 
+        "tuples": 100_000,
+        "tuple_sel": 0.5,
+        "lhs_number": 3,
+        "rhs_sel": 0.5,
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_250k", 
+        "tuples": 250_000,
+        "tuple_sel": 0.5,
+        "lhs_number": 7,
+        "rhs_sel": 0.5, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_500k", 
+        "tuples": 500_000,
+        "tuple_sel": 0.2,
+        "lhs_number": 7,
+        "rhs_sel": 0.5, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_1m", 
+        "tuples": 1_000_000,
+        "tuple_sel": 0.2,
+        "lhs_number": 7,
+        "rhs_sel": 0.5, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_2m", 
+        "tuples": 2_000_000,
+        "tuple_sel": 0.1,
+        "lhs_number": 3,
+        "rhs_sel": 0.01, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_10m", 
+        "tuples": 10_000_000,
+        "tuple_sel": 0.1,
+        "lhs_number": 7,
+        "rhs_sel": 0.01, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_10m_lowc", 
+        "tuples": 10_000_000,
+        "tuple_sel": 0.001,
+        "lhs_number": 7,
+        "rhs_sel": 0.001, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    {
+        "name": "zipf_10m_highc", 
+        "tuples": 10_000_000,
+        "tuple_sel": 0.5,
+        "lhs_number": 7,
+        "rhs_sel": 0.5, 
+        "dist_params": {
+            "dist_type": "zipf", 
+            "lhs_dist_alpha": 1.01, 
+            "lhs_dist_beta": 0, 
+            "rhs_dist_alpha": 1.01, 
+            "rhs_dist_beta": 0,
+            "noise": 0.01,
+            "n_type": "copy",
+        }
+    },
+    # {
+    #     "name": "beta_1m", 
+    #     "tuples": 1_000_000,
+    #     "tuple_sel": 0.1,
+    #     "lhs_number": 7,
+    #     "rhs_sel": 0.01, 
+    #     "dist_params": {
+    #         "dist_type": "beta", 
+    #         "lhs_dist_alpha": 1.01, 
+    #         "lhs_dist_beta": 1, 
+    #         "rhs_dist_alpha": 1.01, 
+    #         "rhs_dist_beta": 3,
+    #         "noise": 0.01,
+    #         "n_type": "copy",
+    #     }
+    # },
+    # {
+    #     "name": "beta_5m", 
+    #     "tuples": 5_000_000,
+    #     "tuple_sel": 0.1,
+    #     "lhs_number": 7,
+    #     "rhs_sel": 0.01, 
+    #     "dist_params": {
+    #         "dist_type": "beta", 
+    #         "lhs_dist_alpha": 1.01, 
+    #         "lhs_dist_beta": 1, 
+    #         "rhs_dist_alpha": 1.01, 
+    #         "rhs_dist_beta": 3,
+    #         "noise": 0.01,
+    #         "n_type": "copy",
+    #     }
+    # },
+    # {
+    #     "name": "beta_10m", 
+    #     "tuples": 10_000_000,
+    #     "tuple_sel": 0.1,
+    #     "lhs_number": 7,
+    #     "rhs_sel": 0.01, 
+    #     "dist_params": {
+    #         "dist_type": "beta", 
+    #         "lhs_dist_alpha": 1.01, 
+    #         "lhs_dist_beta": 1, 
+    #         "rhs_dist_alpha": 1.01, 
+    #         "rhs_dist_beta": 3,
+    #         "noise": 0.01,
+    #         "n_type": "copy",
+    #     }
+    # },
+    # Chashes
+    # {
+    #     "name": "zipf_100m", 
+    #     "tuples": 100_000_000,
+    #     "tuple_sel": 0.1,
+    #     "lhs_number": 7,
+    #     "rhs_sel": 0.01, 
+    #     "dist_params": {
+    #         "dist_type": "zipf", 
+    #         "lhs_dist_alpha": 1.01, 
+    #         "lhs_dist_beta": 0, 
+    #         "rhs_dist_alpha": 1.01, 
+    #         "rhs_dist_beta": 0,
+    #         "noise": 0.01,
+    #         "n_type": "copy",
+    #     }
+    # },
+]
