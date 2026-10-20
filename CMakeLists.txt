@@ -59,3 +59,9 @@ add_executable(simd_test
     ${OPT_DIR}/simd_metrics.cpp
 )
 target_link_libraries(simd_test PRIVATE core)
+
+add_executable(naive_test
+    ${BASE_DIR}/naive_test.cpp
+    ${BASE_DIR}/naive_metrics.cpp
+)
+target_link_libraries(naive_test PRIVATE core)

@@ -67,6 +67,14 @@ def synthetic_experiments(scenarios: List[Dict[str, Any]]) -> List[Dict[str, Any
             "tags": {**tags, "implementation": "auto_relate", "mode": "dirty"},
         })
 
+        experiments.append({
+                "name": f"{scenario['name']}))__naive",
+                "executable": "build/bin/naive_test",
+                "args": [datapath, LHS_JOIN.join(lhs_columns), rhs_column, "dirty"],
+                "stdin": "",
+                "tags": {**tags, "implementation": "naive_metrics", "mode": "dirty"},
+        })
+
         # !!append rest
 
     return experiments
@@ -139,6 +147,14 @@ def fd_ground_truth_experiments(fd_filepath: str, data_type: str, violation_thre
                 "args": [filepath, left_col, right_col, mode],
                 "stdin": v_rows_str,
                 "tags": {**tags, "implementation": "auto_relate"},
+            })
+
+            experiments.append({
+                    "name": f"{base_name}__naive",
+                    "executable": "build/bin/naive_test",
+                    "args": [filepath, left_col, right_col, mode],
+                    "stdin": "",
+                    "tags": {**tags, "implementation": "naive_metrics"},
             })
 
             # !!append rest
