@@ -7,10 +7,11 @@
 
 #include "ankerl_metrics.h"
 #include "auto_relate.h"
-#include "core/csv_index.h"
-#include "core/fd_input.h"
-#include "core/metrics_config.h"
-#include "core/sampling.h"
+#include "csv_index.h"
+#include "fd_input.h"
+#include "metrics.h"
+#include "metrics_config.h"
+#include "sampling.h"
 
 
 int main(int argc, char* argv[]) {
@@ -69,29 +70,29 @@ int main(int argc, char* argv[]) {
 
     Results result = compute_metrics(data, fd, algo, est_xy_card, config, violation_rows);
 
-    metric("MuPlus", result.mu_plus);
-    metric("RfiPrimePlus", result.rfi_prime_plus);
-    metric("AutoRelateScore", result.auto_relate_score);
-    metric("AutoRelateViolationCount", result.auto_relate_violation_count);
-    metric("AutoRelateViolationRate", result.auto_relate_violation_rate);
-    metric("AutoRelateIsReliable", result.auto_relate_is_reliable ? "true" : "false");
-    metric("IndependenceUsed", result.independence_used ? "true" : "false");
-    metric("IndependenceRejected", result.independence_rejected ? "true" : "false");
-    metric("IndependencePvalue", result.independence_pvalue);
-    metric("G1Score", result.g1_score);
-    metric("G2Score", result.g2_score);
-    metric("G3PrimeScore", result.g3_prime_score);
-    metric("LoadTimeSeconds", load_time_s.count());
-    metric("BuildTimeSeconds", result.build_time_s);
-    metric("ComputeTimeSeconds", result.compute_time_s);
-    metric("MuTimeSeconds", result.mu_compute_time_s);
-    metric("RfiTimeSeconds", result.rfi_compute_time_s);
-    metric("AutoRelateTimeSeconds", result.auto_relate_compute_time_s);
-    metric("IndependenceTimeSeconds", result.independence_compute_time_s);
-    metric("G1TimeSeconds", result.g1_compute_time_s);
-    metric("G2TimeSeconds", result.g2_compute_time_s);
-    metric("G3PrimeTimeSeconds", result.g3_prime_compute_time_s);
-    metric("InternalMemoryEstimateMB", result.memory_used_mb);
+    print_metric("MuPlus", result.mu_plus);
+    print_metric("RfiPrimePlus", result.rfi_prime_plus);
+    print_metric("AutoRelateScore", result.auto_relate_score);
+    print_metric("AutoRelateViolationCount", result.auto_relate_violation_count);
+    print_metric("AutoRelateViolationRate", result.auto_relate_violation_rate);
+    print_metric("AutoRelateIsReliable", result.auto_relate_is_reliable ? "true" : "false");
+    print_metric("IndependenceUsed", result.independence_used ? "true" : "false");
+    print_metric("IndependenceRejected", result.independence_rejected ? "true" : "false");
+    print_metric("IndependencePvalue", result.independence_pvalue);
+    print_metric("G1Score", result.g1_score);
+    print_metric("G2Score", result.g2_score);
+    print_metric("G3PrimeScore", result.g3_prime_score);
+    print_metric("LoadTimeSeconds", load_time_s.count());
+    print_metric("BuildTimeSeconds", result.build_time_s);
+    print_metric("ComputeTimeSeconds", result.compute_time_s);
+    print_metric("MuTimeSeconds", result.mu_compute_time_s);
+    print_metric("RfiTimeSeconds", result.rfi_compute_time_s);
+    print_metric("AutoRelateTimeSeconds", result.auto_relate_compute_time_s);
+    print_metric("IndependenceTimeSeconds", result.independence_compute_time_s);
+    print_metric("G1TimeSeconds", result.g1_compute_time_s);
+    print_metric("G2TimeSeconds", result.g2_compute_time_s);
+    print_metric("G3PrimeTimeSeconds", result.g3_prime_compute_time_s);
+    print_metric("InternalMemoryEstimateMB", result.memory_used_mb);
 
     return 0;
 }

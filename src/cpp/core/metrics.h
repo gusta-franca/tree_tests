@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <iostream>
 
 struct Results {
     double mu_plus;
@@ -41,7 +42,9 @@ struct AutoRelateResult {
 };
 
 template <typename T>
-void metric(const std::string& name, const T& value);
+void print_metric(const char name[], const T& value) {
+    std::cout << "Metric::" << name << '=' << value << std::endl;
+}
 
 double mu_plus(size_t num_rows, size_t dom_x_size, double pdep_XY, double pdep_Y);
 

@@ -4,8 +4,8 @@
 #include <sstream>  
 #include <string>
 
-#include "core/csv_index.h"
-#include "core/fd_input.h"
+#include "csv_index.h"
+#include "fd_input.h"
 #include "simd_metrics.h"
 
 

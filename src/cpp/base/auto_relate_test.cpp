@@ -4,10 +4,10 @@
 #include <string>
 
 #include "auto_relate.h"
-#include "core/csv_index.h"
-#include "core/metrics.h"
-#include "core/metrics_config.h"
-#include "core/sampling.h"
+#include "csv_index.h"
+#include "metrics.h"
+#include "metrics_config.h"
+#include "sampling.h"
 
 int main(int argc, char* argv[]) {
     if (argc < 4) {
@@ -73,19 +73,19 @@ int main(int argc, char* argv[]) {
         left_cols_str += result.left_cols[i];
     }
 
-    metric("LeftCols", left_cols_str);
-    metric("RightCol", result.right_col);
-    metric("Score", result.score);
-    metric("IndependencePvalue", result.independence_pvalue);
-    metric("IndependenceUsed", result.independence_used ? "true" : "false");
-    metric("IndependenceRejected", result.independence_rejected ? "true" : "false");
-    metric("IsReliable", result.is_reliable ? "true" : "false");
-    metric("ViolationCount", result.violation_count);
-    metric("ViolationRate", result.violation_rate);
-    metric("LoadTimeSeconds", load_time_s.count());
-    metric("BuildTimeSeconds", result.build_time_s);
-    metric("ComputeTimeSeconds", result.compute_time_s);
-    metric("InternalMemoryEstimateMB", result.memory_used_mb);
+    print_metric("LeftCols", left_cols_str);
+    print_metric("RightCol", result.right_col);
+    print_metric("Score", result.score);
+    print_metric("IndependencePvalue", result.independence_pvalue);
+    print_metric("IndependenceUsed", result.independence_used ? "true" : "false");
+    print_metric("IndependenceRejected", result.independence_rejected ? "true" : "false");
+    print_metric("IsReliable", result.is_reliable ? "true" : "false");
+    print_metric("ViolationCount", result.violation_count);
+    print_metric("ViolationRate", result.violation_rate);
+    print_metric("LoadTimeSeconds", load_time_s.count());
+    print_metric("BuildTimeSeconds", result.build_time_s);
+    print_metric("ComputeTimeSeconds", result.compute_time_s);
+    print_metric("InternalMemoryEstimateMB", result.memory_used_mb);
 
     return 0;
 }

@@ -1,7 +1,7 @@
 #include <bit>
 #include <cmath>
-#include "core/csv_index.h"
-#include "core/metrics.h"
+#include "csv_index.h"
+#include "metrics.h"
 #include "hashmap/hashes/murmurhasher.hpp"
 #include "hashmap/hashes/xxhasher.hpp"
 #include "hashmap/hashmaps/bucketing_simd.hpp"

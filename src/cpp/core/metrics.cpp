@@ -7,11 +7,6 @@
 
 #include "metrics.h"
 
-template <typename T>
-void metric(const std::string& name, const T& value) {
-    std::cout << "Metric::" << name << '=' << value << std::endl;
-}
-
 // "opt" means the counting is made considering the data structures used for counting values in the ankerl/simd implementations;
 // the other implementations are the closest 1:1 implementation from python
 double mu_plus(size_t num_rows, size_t dom_x_size, double pdep_XY, double pdep_Y) {
@@ -100,7 +95,6 @@ double expected_mi(size_t num_rows, const std::vector<uint32_t>& x_counts, const
         // maybe omp for y too? is creating a vector and iterating over it (like with x) better? needs testing
         for (const auto& y_pair : y_freq) {
             int b = y_pair.first;
-            uint64_t freq_b = y_pair.second;
 
             m += expected_mi_pair(n, a, b, lgamma_func);
         }

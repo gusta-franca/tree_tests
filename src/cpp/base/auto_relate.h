@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "core/csv_index.h"
+#include "csv_index.h"
 
 // used to mark a grouped lhs as null
 static constexpr uint32_t NULL_GROUP = UINT32_MAX - 1;

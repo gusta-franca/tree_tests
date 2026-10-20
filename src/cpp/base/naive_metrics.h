@@ -2,9 +2,9 @@
 
 #include <vector>
 
-#include "core/csv_index.h"
-#include "core/fd_input.h"
-#include "core/metrics.h"
+#include "csv_index.h"
+#include "fd_input.h"
+#include "metrics.h"
 
 namespace naive_metrics {
 

@@ -5,8 +5,8 @@
 #define XXH_INLINE_ALL 1
 #include "ankerl/unordered_dense.h"
 #include "auto_relate.h"
-#include "core/metrics.h"
-#include "core/metrics_config.h"
+#include "metrics.h"
+#include "metrics_config.h"
 #include "simd_metrics.h"
 #include "xxhash.h"
 
