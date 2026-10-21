@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
 
     std::string v_rows_str;
     std::getline(std::cin, v_rows_str);
-    std::vector<int> violation_rows = parse_violation_rows(v_rows_str);  // reuse from auto_relate_test.cpp
+    std::vector<int> violation_rows = parse_violation_rows(v_rows_str);
 
     AutoRelateFDConfig config;
     config.dirty_data = (mode == "dirty");

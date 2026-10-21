@@ -60,8 +60,7 @@ add_executable(simd_test
 )
 target_link_libraries(simd_test PRIVATE core)
 
-add_executable(naive_test
-    ${BASE_DIR}/naive_test.cpp
-    ${BASE_DIR}/naive_metrics.cpp
-)
-target_link_libraries(naive_test PRIVATE core)
+foreach(NAIVE_BIN mu_test rfi_test g1_test g2_test g3_test)
+    add_executable(${NAIVE_BIN} ${BASE_DIR}/${NAIVE_BIN}.cpp)
+    target_link_libraries(${NAIVE_BIN} PRIVATE naive_metrics_lib)
+endforeach()
