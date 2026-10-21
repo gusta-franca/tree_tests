@@ -14,28 +14,40 @@ import pandas as pd
 import yaml
 
 from src.python.benchmark.benchmark import get_dataset_path, violation_rate, numeric_type
-from src.python.metrics.cpp_metrics import format_violation_rows
+from src.python.experiments.utils import format_violation_rows, scenario_tags, LHS_JOIN, NAIVE_METRICS, PYTHON_METRICS, PYTHON_EXECUTABLE
+ 
+def naive_experiments(name_prefix: str, datapath: str, lhs_columns, rhs_column: str, tags: Dict[str, Any]) -> List[Dict[str, Any]]:
+    experiments = []
 
-# used to join lhs fields into a single string; | was chosen since no dataset contains | as part of their columns' labels
-LHS_JOIN = "|"
+    for binary, impl_tag in NAIVE_METRICS.items():
+        experiments.append({
+            "name": f"{name_prefix}__{binary}",
+            "executable": f"build/bin/{binary}",
+            "args": [datapath, LHS_JOIN.join(lhs_columns), rhs_column],
+            "stdin": "",
+            "tags": {**tags, "implementation": impl_tag},
+        })
+    
+    return experiments
 
-def scenario_tags(scenario: Dict[str, Any]) -> Dict[str, Any]:
-    dist = scenario["dist_params"]
-    return {
-        "source": "synthetic",
-        "tuples": scenario["tuples"],
-        "tuple_sel": scenario["tuple_sel"],
-        "lhs_number": scenario["lhs_number"],
-        "rhs_sel": scenario.get("rhs_sel"),
-        "dist_type": dist["dist_type"],
-        "lhs_dist_alpha": dist["lhs_dist_alpha"],
-        "lhs_dist_beta": dist["lhs_dist_beta"],
-        "rhs_dist_alpha": dist["rhs_dist_alpha"],
-        "rhs_dist_beta": dist["rhs_dist_beta"],
-        "noise": dist["noise"],
-        "n_type": dist["n_type"],
-    }
 
+def python_experiments(name_prefix: str, datapath: str, lhs_columns, rhs_column: str, tags: Dict[str, Any]) -> List[Dict[str, Any]]:
+    experiments = []
+
+    for metric_name in PYTHON_METRICS:
+        experiments.append({
+            "name": f"{name_prefix}__python_{metric_name}",
+            "executable": PYTHON_EXECUTABLE,
+            "args": ["-m", "src.python.metrics.run_metric_cli",
+                     "--metric", metric_name,
+                     "--csv", datapath,
+                     "--lhs", LHS_JOIN.join(lhs_columns),
+                     "--rhs", rhs_column],
+            "stdin": "",
+            "tags": {**tags, "implementation": f"python_{metric_name}"},
+        })
+
+    return experiments
 
 def synthetic_experiments(scenarios: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
@@ -67,14 +79,10 @@ def synthetic_experiments(scenarios: List[Dict[str, Any]]) -> List[Dict[str, Any
             "tags": {**tags, "implementation": "auto_relate", "mode": "dirty"},
         })
 
-        experiments.append({
-                "name": f"{scenario['name']}))__naive",
-                "executable": "build/bin/naive_test",
-                "args": [datapath, LHS_JOIN.join(lhs_columns), rhs_column, "dirty"],
-                "stdin": "",
-                "tags": {**tags, "implementation": "naive_metrics", "mode": "dirty"},
-        })
+        experiments += naive_experiments(scenario["name"], datapath, lhs_columns, rhs_column, {**tags, "mode": "dirty"})
 
+        experiments += python_experiments(scenario["name"], datapath, lhs_columns, rhs_column, {**tags, "mode": "dirty"})
+        
         # !!append rest
 
     return experiments
@@ -149,14 +157,10 @@ def fd_ground_truth_experiments(fd_filepath: str, data_type: str, violation_thre
                 "tags": {**tags, "implementation": "auto_relate"},
             })
 
-            experiments.append({
-                    "name": f"{base_name}__naive",
-                    "executable": "build/bin/naive_test",
-                    "args": [filepath, left_col, right_col, mode],
-                    "stdin": "",
-                    "tags": {**tags, "implementation": "naive_metrics"},
-            })
+            experiments += naive_experiments(base_name, filepath, [left_col], right_col, tags)
 
+            experiments += python_experiments(base_name, filepath, [left_col], right_col, tags)
+            
             # !!append rest
 
     return experiments
@@ -203,7 +207,7 @@ def main() -> None:
     write_config(args.output, experiments, results_dir_name=args.output.stem, repetitions=args.repetitions, timeout=args.timeout)
 
     print(f"Wrote {len(experiments)} experiments to {args.output}")
-    print(f"Run: python -m tools.runner {args.output}")
+    print(f"Run: python3 -m tools.runner {args.output}")
 
 
 if __name__ == "__main__":
