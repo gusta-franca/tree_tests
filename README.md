@@ -1,18 +1,29 @@
 ## Compiling and Running
 
-### Run all tests
+### Compile the C++ implementations
+```bash
+cmake -B build -S .
+cmake --build build
+```
 
-Inside the root folder:
-- ```$ make all```
-- ```$ python3 main.py```
+### Create a YAML file with the tests
 
-### Run specific tests
+Only real data:
+```bash
+python3 -m src.python.experiments.configs --fd --output configs/real.yaml
+```
 
-In ```benchmark/benchmark.py```:
-- find the function ```run_benchmarks()```;
-- find the variable ```metrics_config```;
-- comment/uncomment the desired implementations.
+Only syn data:
+```bash
+python3 -m src.python.experiments.configs --synthetic --output configs/syn.yaml
+```
 
-In ```main.py```:
-- find the variable ```scenarios```;
-- comment/uncomment the desired scenarios.
+Both:
+```bash
+python3 -m src.python.experiments.configs --fd --synthetic --output configs/complete.yaml
+```
+
+### Run experiment
+```bash
+python3 -m tools.runner configs/<config_name>.yaml
+```
