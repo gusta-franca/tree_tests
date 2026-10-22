@@ -8,11 +8,11 @@ PYTHON_METRICS = ["mu_plus", "rfi_prime_plus", "g1", "g2", "g3_prime"]
 PYTHON_EXECUTABLE = sys.executable
 
 NAIVE_METRICS = {
-    "naive_mu_test": "naive_mu",
-    "naive_rfi_test": "naive_rfi",
-    "naive_g1_test": "naive_g1",
-    "naive_g2_test": "naive_g2",
-    "naive_g3_prime_test": "naive_g3_prime",
+    "mu_test": "naive_mu",
+    "rfi_test": "naive_rfi",
+    "g1_test": "naive_g1",
+    "g2_test": "naive_g2",
+    "g3_test": "naive_g3_prime",
 }
 
 def format_violation_rows(violation_rows: str) -> str:

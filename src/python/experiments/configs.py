@@ -38,7 +38,7 @@ def python_experiments(name_prefix: str, datapath: str, lhs_columns, rhs_column:
         experiments.append({
             "name": f"{name_prefix}__python_{metric_name}",
             "executable": PYTHON_EXECUTABLE,
-            "args": ["-m", "src.python.metrics.run_metric_cli",
+            "args": ["-m", "src.python.metrics.run_metrics",
                      "--metric", metric_name,
                      "--csv", datapath,
                      "--lhs", LHS_JOIN.join(lhs_columns),
