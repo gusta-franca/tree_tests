@@ -1,5 +1,11 @@
 ## Compiling and Running
 
+### Download real datasets
+
+Download  `FD.zip` in https://drive.google.com/drive/folders/1p_omfPGwQP-gIP7cf-NjWJoKYc2OU68E, then unzip to `<this_projetc_root>/data`.
+
+Synthetic datasets will be generated according to configs defined in `src/python/experiments/scenarios.py`
+
 ### Compile the C++ implementations
 ```bash
 cmake -B build -S .
