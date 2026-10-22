@@ -141,6 +141,8 @@ def reliable_fraction_of_information_prime_plus(
 
     return {
         "result": rfi_prime_plus,
+        "fi": fi_value,
+        "bias_estimator": bias_estimator,
     }
 
 
