@@ -13,8 +13,9 @@ from typing import Any, Dict, List
 import pandas as pd
 import yaml
 
-from src.python.benchmark.benchmark import get_dataset_path, violation_rate, numeric_type
+from src.python.benchmark.benchmark import get_dataset_path, get_generation_args, violation_rate, numeric_type
 from src.python.experiments.utils import format_violation_rows, scenario_tags, LHS_JOIN, NAIVE_METRICS, PYTHON_METRICS, PYTHON_EXECUTABLE
+from src.python.generator.generator import generate_SYN
  
 def naive_experiments(name_prefix: str, datapath: str, lhs_columns, rhs_column: str, tags: Dict[str, Any]) -> List[Dict[str, Any]]:
     experiments = []
@@ -59,6 +60,15 @@ def synthetic_experiments(scenarios: List[Dict[str, Any]]) -> List[Dict[str, Any
 
     for scenario in scenarios:
         datapath = str(get_dataset_path(scenario))
+
+        if not os.path.exists(datapath):
+                    gen_args = get_generation_args(scenario)
+                    df = generate_SYN(gen_args)
+                    # plot_rank_frequency(df)
+                    
+                    df.to_csv(datapath, index = False)
+                    print(f"Saved dataset on {datapath}")
+
         lhs_columns = [f"lhs_{i}" for i in range(scenario["lhs_number"])]
         rhs_column = "rhs"
         tags = scenario_tags(scenario)
